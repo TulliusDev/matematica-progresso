@@ -5,10 +5,16 @@
   const PUBLISHABLE_KEY = "sb_publishable_bozZmis5d5v_fQclT3JvHQ__ThY3sfm";
   const REVISION_KEY = "trajetoria-cloud-revisions-v1";
   const SAVE_DELAY = 900;
+  const AUTH_TIMEOUT = 20_000;
 
   function create(options) {
     const client = window.supabase?.createClient(PROJECT_URL, PUBLISHABLE_KEY, {
-      auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true },
+      auth: {
+        flowType: "pkce",
+        detectSessionInUrl: true,
+        persistSession: true,
+        lock: async (_name, _acquireTimeout, callback) => callback(),
+      },
     });
     let session = null;
     let saveTimer = null;
@@ -37,12 +43,18 @@
 
     async function signIn(email) {
       notify("loading", "Enviando link de acesso…");
-      const { error } = await client.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${location.origin}${location.pathname}`, shouldCreateUser: true },
-      });
-      if (error) throw new Error(friendlyError(error));
-      notify("email-sent", "Link enviado. Abra seu e-mail neste dispositivo.");
+      try {
+        const { error } = await withTimeout(client.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: `${location.origin}${location.pathname}`, shouldCreateUser: true },
+        }), AUTH_TIMEOUT);
+        if (error) throw error;
+        notify("email-sent", "Link enviado. Abra seu e-mail neste dispositivo.");
+      } catch (error) {
+        const message = friendlyError(error);
+        notify("error", message);
+        throw new Error(message);
+      }
     }
 
     async function signOut() {
@@ -152,11 +164,18 @@
     localStorage.setItem(REVISION_KEY, JSON.stringify(revisions));
   }
   function clone(value) { return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)); }
+  function withTimeout(promise, milliseconds) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Tempo esgotado ao contatar o Supabase.")), milliseconds)),
+    ]);
+  }
   function friendlyError(error) {
     const message = String(error?.message || error || "Falha desconhecida.");
     if (message.includes("study_progress") || message.includes("schema cache")) return "A tabela study_progress ainda não foi criada no Supabase.";
     if (message.includes("Failed to fetch") || message.includes("NetworkError")) return "Não foi possível conectar ao Supabase. Verifique sua internet.";
     if (message.includes("rate limit") || message.includes("seconds")) return "Aguarde um pouco antes de solicitar outro link.";
+    if (message.includes("Tempo esgotado")) return "O celular não conseguiu contatar o Supabase. Troque entre Wi-Fi e dados móveis e tente novamente.";
     return message;
   }
   window.TrajetoriaCloud = { create };

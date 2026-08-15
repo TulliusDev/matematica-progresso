@@ -916,8 +916,11 @@
     elements.syncSummary.addEventListener("click", openSettings);
     elements.syncLogin.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const button = elements.syncLogin.querySelector("button[type='submit']");
+      button.disabled = true;
       try { await cloudSync.signIn(elements.syncEmail.value.trim()); showToast("Link de acesso enviado por e-mail."); }
       catch (error) { showToast(error.message); }
+      finally { button.disabled = false; }
     });
     elements.syncNow.addEventListener("click", async () => { await cloudSync.synchronize(); });
     elements.syncSignOut.addEventListener("click", async () => {
