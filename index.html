@@ -30,8 +30,8 @@
           <button class="nav-item" type="button" data-view="exams"><span class="nav-icon" aria-hidden="true">≡</span><span>Provas CEFET/COLTEC</span></button>
         </nav>
         <div class="sidebar-footer">
+          <button class="sync-summary" id="sync-summary" type="button"><span class="sync-dot" aria-hidden="true"></span><span id="sync-summary-text">Somente neste dispositivo</span></button>
           <button class="nav-item" id="open-settings" type="button"><span class="nav-icon" aria-hidden="true">⚙</span><span>Configurações</span></button>
-          <p>Dados salvos neste navegador</p>
         </div>
       </aside>
       <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
@@ -111,6 +111,7 @@
       <div class="dialog-shell">
         <header class="dialog-header"><div><p class="eyebrow">Preferências</p><h2 id="settings-title">Configurações</h2></div><button class="dialog-close" data-close-dialog="settings-dialog" type="button" aria-label="Fechar">×</button></header>
         <div class="dialog-body">
+          <section class="settings-section sync-settings"><div><h3>Sincronização entre dispositivos</h3><p id="sync-detail">Entre com seu e-mail para manter o progresso atualizado no computador e no celular.</p></div><form class="sync-login" id="sync-login"><label for="sync-email">Seu e-mail</label><div><input id="sync-email" type="email" autocomplete="email" placeholder="voce@exemplo.com" required /><button class="primary-button" type="submit">Enviar link de acesso</button></div></form><div class="sync-account" id="sync-account" hidden><p>Conectado como <strong id="sync-user-email"></strong></p><div class="backup-actions"><button class="secondary-button" id="sync-now" type="button">Sincronizar agora</button><button class="text-button" id="sync-sign-out" type="button">Sair da conta</button></div></div></section>
           <section class="settings-section"><div class="setting-row"><div><h3>Revisões espaçadas</h3><p>Mostra conteúdos no momento certo para reforçar a memória.</p></div><label class="switch"><input id="reviews-enabled" type="checkbox" /><span aria-hidden="true"></span><span class="sr-only">Ativar revisões</span></label></div><fieldset class="interval-settings" id="interval-settings"><legend>Intervalos após cada revisão</legend><div class="interval-inputs"><label>1ª <input id="interval-1" type="number" min="1" max="365" /> dias</label><label>2ª <input id="interval-2" type="number" min="1" max="365" /> dias</label><label>3ª <input id="interval-3" type="number" min="1" max="365" /> dias</label><label>4ª <input id="interval-4" type="number" min="1" max="365" /> dias</label></div></fieldset><div class="setting-row compact"><div><h3>Reabrir ao esquecer</h3><p>Move para “Estudando” quando você marcar “Esqueci”.</p></div><label class="switch"><input id="reopen-forgotten" type="checkbox" /><span aria-hidden="true"></span><span class="sr-only">Reabrir conteúdos esquecidos</span></label></div><label class="setting-number">Considerar conteúdo sem revisão há <input id="stale-review-days" type="number" min="7" max="180" /> dias</label><button class="primary-button save-settings" id="save-settings" type="button">Salvar configurações</button></section>
           <section class="settings-section"><h3>Backup dos dados</h3><p>Exporte progresso, erros, obras, revisões e questões.</p><div class="backup-actions"><button class="secondary-button" id="export-data" type="button">Exportar backup</button><label class="secondary-button file-button">Importar backup<input id="import-data" type="file" accept="application/json,.json" /></label></div></section>
           <section class="settings-section danger-zone"><div><h3>Reiniciar todos os dados</h3><p>Restaura a estação para o estado inicial.</p></div><button class="danger-button" id="reset-progress" type="button">Reiniciar</button></section>
@@ -119,6 +120,6 @@
     </dialog>
     <dialog class="app-dialog confirm-dialog" id="reset-dialog" aria-labelledby="reset-dialog-title"><form method="dialog"><span class="dialog-icon" aria-hidden="true">↺</span><h2 id="reset-dialog-title">Reiniciar toda a estação?</h2><p>Progresso, práticas, anotações, erros, obras e questões serão apagados. Exporte um backup antes se quiser guardar uma cópia.</p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="danger-button" value="confirm">Sim, reiniciar</button></div></form></dialog>
     <noscript>Ative o JavaScript para utilizar a estação de estudos.</noscript>
-    <script src="subjects.js"></script><script src="storage.js"></script><script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="subjects.js"></script><script src="storage.js"></script><script src="cloud-sync.js"></script><script src="script.js"></script>
   </body>
 </html>

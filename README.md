@@ -100,10 +100,13 @@ O banco de questões aceita instituição, ano, matéria, resultado, dificuldade
 observação e resolução. Uma questão pode ser vinculada a vários conteúdos da
 mesma matéria.
 
-## Persistência e migração
+## Persistência, sincronização e migração
 
-Todos os dados são armazenados no `localStorage`, sob a chave
-`trajetoria-estudos-v3`. Nada é enviado para servidores.
+Todos os dados continuam armazenados no `localStorage`, sob a chave
+`trajetoria-estudos-v3`, para que o site funcione offline. Ao entrar com e-mail,
+o estado também é sincronizado com a tabela `study_progress` do Supabase. O site
+usa somente a chave publicável; o acesso individual é protegido pelas políticas
+RLS configuradas no banco.
 
 Ao abrir esta versão pela primeira vez, dados das chaves anteriores
 `trajetoria-matematica-v2` e `trajetoria-matematica-v1` são migrados
@@ -140,10 +143,12 @@ a `6` representam domingo a sábado.
 
 ## Publicação no GitHub Pages
 
-Os seis arquivos do projeto e a pasta `.vscode` podem permanecer na raiz do
+Os arquivos do projeto e a pasta `.vscode` podem permanecer na raiz do
 repositório. Em **Settings → Pages**, use o branch `main` e a pasta `/ (root)`.
 Como os caminhos de CSS e JavaScript são relativos, o site funciona como página
 de projeto sem ajustes adicionais.
 
-O progresso continua separado por dispositivo e navegador. Atualizar os arquivos
-sem mudar a URL do site não remove normalmente o `localStorage`.
+Sem login, o progresso continua separado por dispositivo e navegador. Com o
+mesmo e-mail conectado, alterações são enviadas ao Supabase e recuperadas nos
+outros dispositivos. Atualizar os arquivos sem mudar a URL do site não remove
+normalmente o `localStorage`.

@@ -252,6 +252,48 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  function mergeStates(localCandidate, remoteCandidate) {
+    const local = normalizeState(localCandidate || {});
+    const remote = normalizeState(remoteCandidate || {});
+    const merged = normalizeState(remote);
+    allTopics.forEach((topic) => {
+      const localTopic = local.topics[topic.id];
+      const remoteTopic = remote.topics[topic.id];
+      const localTime = new Date(localTopic.updatedAt || 0).getTime();
+      const remoteTime = new Date(remoteTopic.updatedAt || 0).getTime();
+      const newest = localTime >= remoteTime ? localTopic : remoteTopic;
+      merged.topics[topic.id] = {
+        ...newest,
+        attempts: mergeItems(localTopic.attempts, remoteTopic.attempts, "timestamp").slice(-100),
+        errors: mergeItems(localTopic.errors, remoteTopic.errors, "lastReviewedAt", "timestamp").slice(-100),
+      };
+    });
+    merged.activities = mergeItems(local.activities, remote.activities, "timestamp").slice(-200);
+    merged.literatureWorks = mergeItems(local.literatureWorks, remote.literatureWorks, "updatedAt", "createdAt").slice(0, 100);
+    merged.examQuestions = mergeItems(local.examQuestions, remote.examQuestions, "updatedAt", "createdAt").slice(0, 500);
+    merged.weeklyReviews = { ...remote.weeklyReviews, ...local.weeklyReviews };
+    merged.settings = { ...remote.settings, ...local.settings };
+    return normalizeState(merged);
+  }
+
+  function mergeItems(first = [], second = [], ...dateFields) {
+    const items = new Map();
+    [...second, ...first].forEach((item) => {
+      if (!item?.id) return;
+      const existing = items.get(item.id);
+      if (!existing || itemDate(item, dateFields) >= itemDate(existing, dateFields)) items.set(item.id, item);
+    });
+    return [...items.values()].sort((a, b) => itemDate(a, dateFields) - itemDate(b, dateFields));
+  }
+
+  function itemDate(item, fields) {
+    for (const field of fields) {
+      const time = new Date(item?.[field] || 0).getTime();
+      if (Number.isFinite(time) && time > 0) return time;
+    }
+    return 0;
+  }
+
   window.TrajetoriaStorage = {
     APP_VERSION,
     STORAGE_KEY,
@@ -263,6 +305,7 @@
     loadState,
     migrateV2,
     normalizeState,
+    mergeStates,
     saveState,
     clampNumber,
   };

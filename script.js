@@ -27,6 +27,7 @@
   let currentErrorFilter = "open";
   let currentErrorSubject = "all";
   let toastTimer;
+  let cloudSync = null;
 
   function initialize() {
     cacheElements();
@@ -35,6 +36,7 @@
     bindStaticEvents();
     navigateFromHash();
     updateNavigationBadges();
+    initializeCloudSync();
   }
 
   function cacheElements() {
@@ -54,7 +56,9 @@
       "exam-observation", "exam-solution", "settings-dialog", "reviews-enabled",
       "interval-settings", "interval-1", "interval-2", "interval-3", "interval-4",
       "reopen-forgotten", "stale-review-days", "save-settings", "export-data",
-      "import-data", "reset-progress", "reset-dialog",
+      "import-data", "reset-progress", "reset-dialog", "sync-summary", "sync-summary-text",
+      "sync-detail", "sync-login", "sync-email", "sync-account", "sync-user-email",
+      "sync-now", "sync-sign-out",
     ];
     ids.forEach((id) => {
       elements[toCamel(id)] = document.getElementById(id);
@@ -822,8 +826,33 @@
   }
 
   function persist() {
-    try { Storage.saveState(state); }
+    try { Storage.saveState(state); cloudSync?.queueSave(state); }
     catch (error) { console.warn("Não foi possível salvar.", error); showToast("Não foi possível salvar neste navegador."); }
+  }
+
+  function initializeCloudSync() {
+    if (!window.TrajetoriaCloud) return;
+    cloudSync = window.TrajetoriaCloud.create({
+      getState: () => state,
+      mergeStates: Storage.mergeStates,
+      applyState(nextState) {
+        state = Storage.normalizeState(nextState);
+        Storage.saveState(state);
+        renderCurrentView();
+        if (elements.topicDialog.open) populateTopicDialog();
+      },
+      onAuth(user) {
+        elements.syncLogin.hidden = Boolean(user);
+        elements.syncAccount.hidden = !user;
+        elements.syncUserEmail.textContent = user?.email || "";
+      },
+      onStatus({ status, detail }) {
+        elements.syncSummary.dataset.status = status;
+        elements.syncSummaryText.textContent = status === "synced" ? "Progresso sincronizado" : status === "offline" ? "Salvo offline" : status === "error" ? "Falha na sincronização" : status === "signed-out" ? "Somente neste dispositivo" : status === "email-sent" ? "Confira seu e-mail" : "Sincronizando…";
+        elements.syncDetail.textContent = detail;
+      },
+    });
+    cloudSync.initialize();
   }
 
   function addActivity(type, topicId, description) {
@@ -884,6 +913,17 @@
     elements.saveSettings.addEventListener("click", saveSettings);
     elements.exportData.addEventListener("click", exportData);
     elements.importData.addEventListener("change", importData);
+    elements.syncSummary.addEventListener("click", openSettings);
+    elements.syncLogin.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try { await cloudSync.signIn(elements.syncEmail.value.trim()); showToast("Link de acesso enviado por e-mail."); }
+      catch (error) { showToast(error.message); }
+    });
+    elements.syncNow.addEventListener("click", async () => { await cloudSync.synchronize(); });
+    elements.syncSignOut.addEventListener("click", async () => {
+      try { await cloudSync.signOut(); showToast("Você saiu da sincronização."); }
+      catch (error) { showToast(error.message); }
+    });
     elements.resetProgress.addEventListener("click", () => { closeDialog(elements.settingsDialog); openDialog(elements.resetDialog); });
     elements.resetDialog.addEventListener("close", () => { if (elements.resetDialog.returnValue === "confirm") resetAll(); });
   }
