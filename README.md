@@ -1,109 +1,149 @@
-# Trajetória — Matemática
+# Trajetória — Central de estudos CEFET-MG e COLTEC
 
-Plataforma pessoal, responsiva e sem dependências para acompanhar o estudo de
-Matemática. Além de mostrar quais conteúdos foram cobertos, ela registra evidências
-de prática e ajuda a revisar o que pode estar sendo esquecido.
+Estação pessoal, responsiva e sem dependências para organizar a preparação para
+as provas do CEFET-MG e COLTEC. A plataforma responde primeiro à pergunta **“o
+que eu deveria estudar agora?”** e mantém a filosofia **“domine um conceito de
+cada vez”** em todas as matérias.
 
 ## Como executar
 
-Abra `index.html` diretamente em um navegador moderno. Não é necessário instalar
-pacotes nem iniciar um servidor.
+Abra `index.html` diretamente em um navegador moderno. Também é possível usar a
+extensão Live Server do VS Code; o projeto já mantém a configuração da porta
+`5501` em `.vscode/settings.json`.
 
-## Arquivos
+Não há instalação, servidor, framework ou biblioteca externa.
 
-- `index.html`: estrutura semântica do dashboard e das janelas de conteúdo.
-- `styles.css`: tema escuro, componentes, responsividade e movimento reduzido.
-- `script.js`: dados, cálculos, renderização, revisões e persistência.
+## Estrutura do projeto
 
-## Recursos
+- `index.html`: estrutura semântica, navegação e diálogos reutilizáveis.
+- `styles.css`: identidade escura, componentes, estados e responsividade.
+- `subjects.js`: catálogo curricular e rotina semanal.
+- `storage.js`: estado inicial, normalização, persistência e migrações.
+- `script.js`: recomendações, renderização, interações e módulos especiais.
+- `.vscode/settings.json`: preferência local do Live Server.
 
-- Estados **Não iniciado**, **Em estudo** e **Dominado**.
-- Percentuais gerais e por bloco calculados automaticamente.
-- Recomendação inteligente que prioriza:
-  1. revisões vencidas;
-  2. conteúdos que já estão em estudo;
-  3. o próximo conteúdo ainda não iniciado.
-- Revisões espaçadas com avaliação **Esqueci**, **Difícil**, **Bom** ou **Fácil**.
-- Intervalos de revisão configuráveis.
-- Registro de baterias de questões e cálculo da taxa de acerto.
-- Nível de confiança, anotação rápida e caderno de erros por conteúdo.
-- Indicadores gerais de prática e erros ainda não resolvidos.
-- Filtros por estado e blocos expansíveis.
-- Exportação e importação de backup em JSON.
-- Migração automática do progresso salvo pela primeira versão.
-- Reinício protegido por confirmação.
+## Áreas disponíveis
 
-## Como utilizar
+### Painel inicial
 
-Clique no nome de um conteúdo para abrir seus detalhes. O botão quadrado à
-esquerda permite marcar o domínio rapidamente.
+O painel considera automaticamente o dia da semana e mostra:
 
-Uma rotina recomendada:
+- matéria principal e secundária;
+- duração prevista;
+- conteúdo recomendado;
+- revisões vencidas;
+- progresso geral e por matéria;
+- dominados, conteúdos ativos e erros;
+- atividade recente.
 
-1. Siga o conteúdo indicado no cartão de foco.
-2. Mude-o para **Em estudo**.
-3. Registre uma bateria de questões.
-4. Anote os erros pelo motivo que os causou.
-5. Marque como **Dominado** quando conseguir resolver sem ajuda.
-6. Quando a revisão aparecer, avalie honestamente a dificuldade.
+Uma revisão vencida tem prioridade. Depois, a recomendação segue esta ordem:
 
-Marcar um conteúdo como dominado agenda sua primeira revisão. Se **Reabrir ao
-esquecer** estiver ativo, escolher **Esqueci** devolve o conteúdo para **Em estudo**.
+1. conteúdo em **Consolidando**;
+2. conteúdo em **Estudando**;
+3. primeiro conteúdo **Não iniciado** da matéria planejada.
 
-## Persistência e privacidade
+No sábado e domingo o painel oferece a revisão semanal, sem obrigar um dos dias.
 
-Os dados são armazenados no `localStorage` deste navegador, sob a chave
-`trajetoria-matematica-v2`. Nada é enviado para servidores.
+### Matérias
 
-Como o armazenamento pertence ao navegador e ao endereço local usados, limpar os
-dados do navegador pode apagar o progresso. Use **Configurações e backup →
-Exportar backup** para guardar uma cópia.
+Existem trilhas completas para:
 
-## Configurações
+- Matemática — 26 conteúdos;
+- Português — 23 conteúdos;
+- Ciências — 39 conteúdos;
+- História — 54 conteúdos;
+- Geografia — 50 conteúdos.
 
-O ícone de engrenagem abre as preferências. É possível:
+História utiliza uma apresentação cronológica com períodos. Cada conteúdo de
+qualquer matéria aceita quatro estados:
 
-- ativar ou desativar revisões;
-- alterar os quatro intervalos, em dias;
-- escolher se um conteúdo esquecido deve voltar para estudo;
-- exportar ou importar os dados;
-- reiniciar todo o progresso.
+- Não iniciado;
+- Estudando;
+- Consolidando;
+- Dominado.
 
-Os intervalos configurados são aplicados aos próximos agendamentos, sem alterar
-retroativamente datas já calculadas.
+Também é possível registrar prática, confiança, anotação, erros e revisões.
 
-## Alterar os conteúdos
+### Literatura
 
-Os blocos ficam no array `blocks`, no início de `script.js`.
+As obras ficam fora da rotina obrigatória de 80 minutos. Cada ficha permite
+registrar progresso de leitura, autor, personagens, narrador, espaço, tempo,
+estrutura, conflitos, temas, símbolos, ironias, linguagem, contexto histórico,
+anotações, trechos e questões relacionadas.
 
-### Adicionar um bloco
+### Caderno de erros
+
+O caderno reúne automaticamente os erros registrados dentro dos conteúdos e
+também permite criar um registro pela área geral. Cada erro contém:
+
+- matéria e conteúdo;
+- descrição;
+- compreensão correta;
+- data;
+- situação de revisão;
+- quantidade de revisões.
+
+### Revisão semanal
+
+A seleção semanal reúne automaticamente:
+
+- conteúdos movimentados ou praticados na semana;
+- conteúdos em **Consolidando**;
+- erros não revisados;
+- conteúdos dominados sem contato há muitos dias.
+
+O limite de dias sem revisão pode ser alterado nas configurações.
+
+### Provas CEFET/COLTEC
+
+O banco de questões aceita instituição, ano, matéria, resultado, dificuldade,
+observação e resolução. Uma questão pode ser vinculada a vários conteúdos da
+mesma matéria.
+
+## Persistência e migração
+
+Todos os dados são armazenados no `localStorage`, sob a chave
+`trajetoria-estudos-v3`. Nada é enviado para servidores.
+
+Ao abrir esta versão pela primeira vez, dados das chaves anteriores
+`trajetoria-matematica-v2` e `trajetoria-matematica-v1` são migrados
+automaticamente. A migração preserva estados, práticas, confiança, anotações,
+erros e datas de revisão sempre que houver correspondência.
+
+Na trilha de Matemática, os conteúdos estudados até **Produtos notáveis** ficam
+dominados. O estado já registrado de **Fatoração** é preservado.
+
+Use **Configurações → Exportar backup** antes de limpar dados do navegador ou
+trocar de endereço. O backup inclui todas as matérias, obras, erros, revisões,
+questões e preferências.
+
+## Editar conteúdos e rotina
+
+Todo o currículo está em `subjects.js`, no array `subjects`. Um tópico segue este
+formato:
 
 ```js
-{
-  id: "funcoes",
-  name: "Funções",
-  topics: [
-    { id: "funcao-afim", name: "Função afim", initiallyCompleted: false }
-  ]
-}
+topic("identificador-unico", "Nome do conteúdo")
 ```
 
-### Adicionar um tópico
+Para iniciar dominado:
 
 ```js
-{ id: "equacao-segundo-grau", name: "Equação do 2º grau", initiallyCompleted: false }
+topic("identificador-unico", "Nome do conteúdo", "mastered")
 ```
 
-Todos os identificadores devem ser únicos, sem espaços e sem acentos.
+Os identificadores devem ser únicos em toda a plataforma, sem espaços ou
+acentos. Novas matérias utilizam a mesma estrutura de `blocks` e `topics`.
 
-### Alterar o estado inicial
+A rotina fica no objeto `schedule`, ao final de `subjects.js`. Os números de `0`
+a `6` representam domingo a sábado.
 
-Mude `initiallyCompleted` para `true` ou `false`. A configuração é usada quando não
-existe progresso salvo ou quando o progresso é reiniciado.
+## Publicação no GitHub Pages
 
-## Evoluções futuras
+Os seis arquivos do projeto e a pasta `.vscode` podem permanecer na raiz do
+repositório. Em **Settings → Pages**, use o branch `main` e a pasta `/ (root)`.
+Como os caminhos de CSS e JavaScript são relativos, o site funciona como página
+de projeto sem ajustes adicionais.
 
-A estrutura já comporta novos campos sem exigir mudanças no HTML. Próximas
-evoluções possíveis são metas semanais baseadas em questões, páginas de teoria,
-flashcards gerados a partir do caderno de erros e sincronização entre dispositivos.
-Elas não foram incluídas agora para preservar o foco e a simplicidade.
+O progresso continua separado por dispositivo e navegador. Atualizar os arquivos
+sem mudar a URL do site não remove normalmente o `localStorage`.

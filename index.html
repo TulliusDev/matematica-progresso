@@ -4,367 +4,121 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#090b0f" />
-    <meta
-      name="description"
-      content="Dashboard pessoal para acompanhar, praticar e revisar Matemática."
-    />
-    <title>Trajetória — Matemática</title>
+    <meta name="description" content="Trajetória: estação pessoal de estudos para preparação CEFET-MG e COLTEC." />
+    <title>Trajetória — Central de estudos</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <a class="skip-link" href="#conteudos">Pular para os conteúdos</a>
-
-    <header class="topbar">
-      <a class="brand" href="#" aria-label="Trajetória, início">
-        <span class="brand-mark" aria-hidden="true">T</span>
-        <span>Trajetória</span>
-      </a>
-      <div class="topbar-actions">
-        <span class="subject-pill">Matemática</span>
-        <button class="icon-button" id="open-settings" type="button" aria-label="Abrir configurações">
-          <span aria-hidden="true">⚙</span>
-        </button>
+    <a class="skip-link" href="#main-content">Pular para o conteúdo</a>
+    <div class="app-layout">
+      <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
+        <div class="sidebar-header">
+          <button class="brand nav-button" type="button" data-view="home" aria-label="Trajetória, início">
+            <span class="brand-mark" aria-hidden="true">T</span><span>Trajetória</span>
+          </button>
+          <button class="sidebar-close" id="close-menu" type="button" aria-label="Fechar menu">×</button>
+        </div>
+        <nav class="main-nav">
+          <p class="nav-label">Visão geral</p>
+          <button class="nav-item active" type="button" data-view="home"><span class="nav-icon" aria-hidden="true">⌂</span><span>Início</span></button>
+          <p class="nav-label">Matérias</p>
+          <div id="subject-navigation"></div>
+          <p class="nav-label">Ferramentas</p>
+          <button class="nav-item" type="button" data-view="literatura"><span class="nav-icon" aria-hidden="true">L</span><span>Literatura</span></button>
+          <button class="nav-item" type="button" data-view="errors"><span class="nav-icon" aria-hidden="true">!</span><span>Caderno de erros</span><span class="nav-count" id="nav-errors-count" hidden>0</span></button>
+          <button class="nav-item" type="button" data-view="review"><span class="nav-icon" aria-hidden="true">↻</span><span>Revisão semanal</span><span class="nav-count" id="nav-review-count" hidden>0</span></button>
+          <button class="nav-item" type="button" data-view="exams"><span class="nav-icon" aria-hidden="true">≡</span><span>Provas CEFET/COLTEC</span></button>
+        </nav>
+        <div class="sidebar-footer">
+          <button class="nav-item" id="open-settings" type="button"><span class="nav-icon" aria-hidden="true">⚙</span><span>Configurações</span></button>
+          <p>Dados salvos neste navegador</p>
+        </div>
+      </aside>
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+      <div class="app-main">
+        <header class="mobile-topbar">
+          <button class="icon-button" id="open-menu" type="button" aria-label="Abrir menu">☰</button>
+          <button class="brand nav-button" type="button" data-view="home"><span class="brand-mark" aria-hidden="true">T</span><span>Trajetória</span></button>
+          <button class="icon-button" id="mobile-settings" type="button" aria-label="Abrir configurações">⚙</button>
+        </header>
+        <main class="container" id="main-content" tabindex="-1"></main>
       </div>
-    </header>
-
-    <main class="container">
-      <section class="intro" aria-labelledby="page-title">
-        <div>
-          <p class="eyebrow">Seu painel de estudos</p>
-          <h1 id="page-title">Domine um conceito<br />de cada vez.</h1>
-          <p class="intro-copy">
-            Acompanhe o que aprendeu, pratique e revise antes que o conhecimento se perca.
-          </p>
-        </div>
-        <div class="activity" id="last-activity" aria-live="polite">
-          <span class="activity-dot" aria-hidden="true"></span>
-          <span>Nenhuma atividade recente</span>
-        </div>
-      </section>
-
-      <section class="overview" aria-label="Resumo do progresso">
-        <div class="progress-feature">
-          <div class="progress-ring" id="progress-ring" aria-hidden="true">
-            <span id="overall-percentage">0%</span>
-          </div>
-          <div class="progress-copy">
-            <p class="stat-label">Domínio da trilha</p>
-            <p class="progress-message" id="progress-message">A jornada começa aqui.</p>
-            <div
-              class="progress-track progress-track-large"
-              id="overall-track"
-              role="progressbar"
-              aria-label="Progresso geral"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-            >
-              <span id="overall-bar"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <span class="stat-icon check-icon" aria-hidden="true">✓</span>
-          <div>
-            <strong id="mastered-count">0</strong>
-            <span id="total-count">de 0 conteúdos</span>
-          </div>
-          <p>Dominados</p>
-        </div>
-
-        <div class="stat-card">
-          <span class="stat-icon blocks-icon" aria-hidden="true">▦</span>
-          <div>
-            <strong id="completed-blocks">0</strong>
-            <span id="total-blocks">de 0 blocos</span>
-          </div>
-          <p>Blocos completos</p>
-        </div>
-
-        <div class="stat-card review-stat" id="review-stat">
-          <span class="stat-icon review-icon" aria-hidden="true">↻</span>
-          <div>
-            <strong id="due-count">0</strong>
-            <span id="review-status">para hoje</span>
-          </div>
-          <p>Revisões</p>
-        </div>
-      </section>
-
-      <section class="focus-card" id="focus-card" aria-labelledby="focus-title">
-        <div class="focus-icon" id="focus-icon" aria-hidden="true">↗</div>
-        <div class="focus-copy">
-          <p class="eyebrow" id="focus-label">Próximo passo recomendado</p>
-          <h2 id="focus-title">Carregando...</h2>
-          <p id="focus-context"></p>
-          <div class="focus-reason" id="focus-reason"></div>
-        </div>
-        <button class="primary-button" id="go-to-focus" type="button">
-          Abrir conteúdo <span aria-hidden="true">→</span>
-        </button>
-      </section>
-
-      <section class="insights" id="insights" aria-label="Indicadores de estudo">
-        <div class="insight">
-          <span>Em estudo</span>
-          <strong id="studying-count">0</strong>
-          <small>conteúdos em andamento</small>
-        </div>
-        <div class="insight">
-          <span>Prática registrada</span>
-          <strong id="accuracy-value">—</strong>
-          <small id="practice-summary">nenhuma questão ainda</small>
-        </div>
-        <div class="insight">
-          <span>Caderno de erros</span>
-          <strong id="open-errors-count">0</strong>
-          <small>erros ainda não resolvidos</small>
-        </div>
-      </section>
-
-      <section class="study-section" id="conteudos" aria-labelledby="study-title">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Mapa de aprendizagem</p>
-            <h2 id="study-title">Blocos de estudo</h2>
-          </div>
-          <div class="view-actions">
-            <div class="select-wrap">
-              <label class="sr-only" for="status-filter">Filtrar conteúdos</label>
-              <select id="status-filter">
-                <option value="all">Todos os conteúdos</option>
-                <option value="pending">Pendentes</option>
-                <option value="studying">Em estudo</option>
-                <option value="review">Para revisar</option>
-                <option value="mastered">Dominados</option>
-              </select>
-            </div>
-            <button class="text-button" id="toggle-all" type="button">Recolher todos</button>
-          </div>
-        </div>
-
-        <div class="blocks-grid" id="blocks-container"></div>
-        <p class="empty-state" id="empty-state" hidden>
-          Nenhum conteúdo corresponde a este filtro.
-        </p>
-      </section>
-
-      <footer class="footer">
-        <span>Trajetória · Seus dados permanecem neste navegador</span>
-        <button class="footer-button" id="footer-settings" type="button">Configurações e backup</button>
-      </footer>
-    </main>
-
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <dialog class="app-dialog topic-dialog" id="topic-dialog" aria-labelledby="topic-dialog-title">
       <div class="dialog-shell">
-        <header class="dialog-header">
-          <div>
-            <p class="eyebrow" id="topic-dialog-block">Bloco</p>
-            <h2 id="topic-dialog-title">Conteúdo</h2>
-          </div>
-          <button class="dialog-close" data-close-dialog="topic-dialog" type="button" aria-label="Fechar">
-            ×
-          </button>
-        </header>
-
+        <header class="dialog-header"><div><p class="eyebrow" id="topic-dialog-block">Matéria · Bloco</p><h2 id="topic-dialog-title">Conteúdo</h2></div><button class="dialog-close" data-close-dialog="topic-dialog" type="button" aria-label="Fechar">×</button></header>
         <div class="dialog-body">
           <section class="detail-section" aria-labelledby="status-title">
-            <div class="detail-heading">
-              <div>
-                <h3 id="status-title">Estado de aprendizagem</h3>
-                <p>Use “dominado” somente quando conseguir resolver sem ajuda.</p>
-              </div>
-              <span class="review-date" id="topic-review-date"></span>
-            </div>
-            <div class="state-picker" id="state-picker" role="group" aria-label="Estado do conteúdo">
-              <button type="button" data-state="not-started">Não iniciado</button>
-              <button type="button" data-state="studying">Em estudo</button>
-              <button type="button" data-state="mastered">Dominado</button>
+            <div class="detail-heading"><div><h3 id="status-title">Estado de aprendizagem</h3><p>Avance conforme sua capacidade de explicar e resolver sem ajuda.</p></div><span class="review-date" id="topic-review-date"></span></div>
+            <div class="state-picker four-states" id="state-picker" role="group" aria-label="Estado do conteúdo">
+              <button type="button" data-state="not-started">Não iniciado</button><button type="button" data-state="studying">Estudando</button><button type="button" data-state="consolidating">Consolidando</button><button type="button" data-state="mastered">Dominado</button>
             </div>
           </section>
-
           <section class="review-panel" id="review-panel" aria-labelledby="review-title" hidden>
-            <div>
-              <p class="eyebrow">Revisão disponível</p>
-              <h3 id="review-title">Você ainda consegue resolver?</h3>
-              <p>Escolha com honestidade. A próxima revisão será ajustada.</p>
-            </div>
-            <div class="review-actions" id="review-actions">
-              <button type="button" data-rating="forgot">Esqueci</button>
-              <button type="button" data-rating="hard">Difícil</button>
-              <button type="button" data-rating="good">Bom</button>
-              <button type="button" data-rating="easy">Fácil</button>
-            </div>
+            <div><p class="eyebrow">Revisão disponível</p><h3 id="review-title">Você ainda consegue resolver?</h3><p>Sua resposta ajusta o estado e a próxima revisão.</p></div>
+            <div class="review-actions" id="review-actions"><button type="button" data-rating="forgot">Esqueci</button><button type="button" data-rating="hard">Difícil</button><button type="button" data-rating="good">Bom</button><button type="button" data-rating="easy">Fácil</button></div>
           </section>
-
           <div class="detail-grid">
             <section class="detail-section practice-section" aria-labelledby="practice-title">
-              <div class="detail-heading">
-                <div>
-                  <h3 id="practice-title">Prática</h3>
-                  <p>Registre uma bateria de questões.</p>
-                </div>
-                <strong class="metric-chip" id="topic-accuracy">Sem dados</strong>
-              </div>
-              <form class="practice-form" id="practice-form">
-                <label>
-                  Acertos
-                  <input id="practice-correct" type="number" inputmode="numeric" min="0" required />
-                </label>
-                <label>
-                  Questões
-                  <input id="practice-total" type="number" inputmode="numeric" min="1" required />
-                </label>
-                <button class="secondary-button" type="submit">Registrar</button>
-              </form>
-              <p class="form-feedback" id="practice-feedback" aria-live="polite"></p>
-              <div class="attempts-list" id="attempts-list"></div>
+              <div class="detail-heading"><div><h3 id="practice-title">Prática</h3><p>Registre uma bateria de questões.</p></div><strong class="metric-chip" id="topic-accuracy">Sem dados</strong></div>
+              <form class="practice-form" id="practice-form"><label>Acertos<input id="practice-correct" type="number" inputmode="numeric" min="0" required /></label><label>Questões<input id="practice-total" type="number" inputmode="numeric" min="1" required /></label><button class="secondary-button" type="submit">Registrar</button></form>
+              <p class="form-feedback" id="practice-feedback" aria-live="polite"></p><div class="attempts-list" id="attempts-list"></div>
             </section>
-
             <section class="detail-section" aria-labelledby="confidence-title">
-              <h3 id="confidence-title">Confiança</h3>
-              <p>Quão seguro você se sente sem consultar material?</p>
-              <div class="confidence-picker" id="confidence-picker" role="group" aria-label="Nível de confiança">
-                <button type="button" data-confidence="1" aria-label="Confiança 1 de 5">1</button>
-                <button type="button" data-confidence="2" aria-label="Confiança 2 de 5">2</button>
-                <button type="button" data-confidence="3" aria-label="Confiança 3 de 5">3</button>
-                <button type="button" data-confidence="4" aria-label="Confiança 4 de 5">4</button>
-                <button type="button" data-confidence="5" aria-label="Confiança 5 de 5">5</button>
-              </div>
-              <label class="notes-label" for="topic-notes">
-                Anotação rápida
-                <textarea
-                  id="topic-notes"
-                  rows="4"
-                  maxlength="800"
-                  placeholder="Fórmulas, dúvidas ou algo que deseja lembrar..."
-                ></textarea>
-              </label>
-              <button class="secondary-button save-notes" id="save-notes" type="button">
-                Salvar anotação
-              </button>
+              <h3 id="confidence-title">Confiança</h3><p>Quão seguro você se sente sem consultar material?</p>
+              <div class="confidence-picker" id="confidence-picker" role="group" aria-label="Nível de confiança"><button type="button" data-confidence="1" aria-label="Confiança 1 de 5">1</button><button type="button" data-confidence="2" aria-label="Confiança 2 de 5">2</button><button type="button" data-confidence="3" aria-label="Confiança 3 de 5">3</button><button type="button" data-confidence="4" aria-label="Confiança 4 de 5">4</button><button type="button" data-confidence="5" aria-label="Confiança 5 de 5">5</button></div>
+              <label class="notes-label" for="topic-notes">Anotação rápida<textarea id="topic-notes" rows="4" maxlength="1200" placeholder="Resumo, fórmula, relação de causa e consequência..."></textarea></label>
+              <button class="secondary-button save-notes" id="save-notes" type="button">Salvar anotação</button>
             </section>
           </div>
-
           <section class="detail-section errors-section" aria-labelledby="errors-title">
-            <div class="detail-heading">
-              <div>
-                <h3 id="errors-title">Caderno de erros</h3>
-                <p>Registre o motivo do erro, não apenas a questão.</p>
-              </div>
-              <span class="metric-chip" id="topic-open-errors">0 pendentes</span>
-            </div>
-            <form class="error-form" id="error-form">
-              <label class="sr-only" for="error-text">Novo erro ou dificuldade</label>
-              <input
-                id="error-text"
-                type="text"
-                maxlength="240"
-                placeholder="Ex.: confundi razão com diferença entre os valores"
-                required
-              />
-              <button class="secondary-button" type="submit">Adicionar</button>
-            </form>
+            <div class="detail-heading"><div><h3 id="errors-title">Caderno de erros</h3><p>Registre o erro e a compreensão correta.</p></div><span class="metric-chip" id="topic-open-errors">0 pendentes</span></div>
+            <form class="inline-error-form" id="error-form"><label>O que errou<input id="error-text" type="text" maxlength="300" placeholder="Ex.: confundi massa com peso" required /></label><label>Compreensão correta<input id="error-correction" type="text" maxlength="500" placeholder="Explique a correção com suas palavras" required /></label><button class="secondary-button" type="submit">Adicionar</button></form>
             <ul class="errors-list" id="errors-list"></ul>
           </section>
         </div>
       </div>
     </dialog>
 
-    <dialog class="app-dialog settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
-      <div class="dialog-shell">
-        <header class="dialog-header">
-          <div>
-            <p class="eyebrow">Preferências</p>
-            <h2 id="settings-title">Configurações</h2>
-          </div>
-          <button class="dialog-close" data-close-dialog="settings-dialog" type="button" aria-label="Fechar">
-            ×
-          </button>
-        </header>
-        <div class="dialog-body">
-          <section class="settings-section">
-            <div class="setting-row">
-              <div>
-                <h3>Revisões espaçadas</h3>
-                <p>Mostra conteúdos dominados no momento certo para reforçar a memória.</p>
-              </div>
-              <label class="switch">
-                <input id="reviews-enabled" type="checkbox" />
-                <span aria-hidden="true"></span>
-                <span class="sr-only">Ativar revisões espaçadas</span>
-              </label>
-            </div>
-
-            <fieldset class="interval-settings" id="interval-settings">
-              <legend>Intervalos após cada revisão</legend>
-              <div class="interval-inputs">
-                <label>1ª <input id="interval-1" type="number" min="1" max="365" /> dias</label>
-                <label>2ª <input id="interval-2" type="number" min="1" max="365" /> dias</label>
-                <label>3ª <input id="interval-3" type="number" min="1" max="365" /> dias</label>
-                <label>4ª <input id="interval-4" type="number" min="1" max="365" /> dias</label>
-              </div>
-              <p>Alterações valem para os próximos agendamentos.</p>
-            </fieldset>
-
-            <div class="setting-row compact">
-              <div>
-                <h3>Reabrir ao esquecer</h3>
-                <p>Move o conteúdo para “em estudo” quando você marcar “Esqueci”.</p>
-              </div>
-              <label class="switch">
-                <input id="reopen-forgotten" type="checkbox" />
-                <span aria-hidden="true"></span>
-                <span class="sr-only">Reabrir conteúdos esquecidos</span>
-              </label>
-            </div>
-            <button class="primary-button save-settings" id="save-settings" type="button">
-              Salvar configurações
-            </button>
-          </section>
-
-          <section class="settings-section">
-            <h3>Backup dos dados</h3>
-            <p>Exporte seu progresso para guardar uma cópia ou levar para outro navegador.</p>
-            <div class="backup-actions">
-              <button class="secondary-button" id="export-data" type="button">Exportar backup</button>
-              <label class="secondary-button file-button">
-                Importar backup
-                <input id="import-data" type="file" accept="application/json,.json" />
-              </label>
-            </div>
-          </section>
-
-          <section class="settings-section danger-zone">
-            <div>
-              <h3>Reiniciar progresso</h3>
-              <p>Restaura todos os conteúdos para o estado inicial.</p>
-            </div>
-            <button class="danger-button" id="reset-progress" type="button">Reiniciar</button>
-          </section>
-        </div>
-      </div>
+    <dialog class="app-dialog form-dialog" id="global-error-dialog" aria-labelledby="global-error-title">
+      <form class="dialog-shell" id="global-error-form">
+        <header class="dialog-header"><div><p class="eyebrow">Caderno geral</p><h2 id="global-error-title">Registrar erro</h2></div><button class="dialog-close" data-close-dialog="global-error-dialog" type="button" aria-label="Fechar">×</button></header>
+        <div class="dialog-body form-stack"><label>Matéria<select id="global-error-subject" required></select></label><label>Conteúdo<select id="global-error-topic" required></select></label><label>Descrição do erro<textarea id="global-error-description" rows="3" maxlength="300" required></textarea></label><label>Resposta ou compreensão correta<textarea id="global-error-correction" rows="3" maxlength="500" required></textarea></label><button class="primary-button" type="submit">Salvar erro</button></div>
+      </form>
     </dialog>
 
-    <dialog class="app-dialog confirm-dialog" id="reset-dialog" aria-labelledby="reset-dialog-title">
-      <form method="dialog">
-        <span class="dialog-icon" aria-hidden="true">↺</span>
-        <h2 id="reset-dialog-title">Reiniciar progresso?</h2>
-        <p>
-          Práticas, anotações, erros e datas de revisão também serão apagados. Exporte um backup
-          antes se quiser guardar uma cópia.
-        </p>
-        <div class="dialog-actions">
-          <button class="secondary-button" value="cancel">Cancelar</button>
-          <button class="danger-button" value="confirm">Sim, reiniciar</button>
+    <dialog class="app-dialog form-dialog wide-form-dialog" id="literature-dialog" aria-labelledby="literature-dialog-title">
+      <form class="dialog-shell" id="literature-form">
+        <header class="dialog-header"><div><p class="eyebrow">Ficha de leitura</p><h2 id="literature-dialog-title">Adicionar obra</h2></div><button class="dialog-close" data-close-dialog="literature-dialog" type="button" aria-label="Fechar">×</button></header>
+        <div class="dialog-body literature-form-grid">
+          <input id="literature-id" type="hidden" /><label class="span-2">Obra<input id="literature-title" maxlength="120" required /></label><label>Autor<input id="literature-author" maxlength="100" /></label><label>Progresso de leitura (%)<input id="literature-progress" type="number" min="0" max="100" value="0" required /></label>
+          <label>Personagens<textarea id="literature-characters" rows="3"></textarea></label><label>Narrador<textarea id="literature-narrator" rows="3"></textarea></label><label>Espaço<textarea id="literature-space" rows="3"></textarea></label><label>Tempo<textarea id="literature-time" rows="3"></textarea></label><label>Estrutura<textarea id="literature-structure" rows="3"></textarea></label><label>Conflitos<textarea id="literature-conflicts" rows="3"></textarea></label><label>Temas<textarea id="literature-themes" rows="3"></textarea></label><label>Símbolos<textarea id="literature-symbols" rows="3"></textarea></label><label>Ironias<textarea id="literature-ironies" rows="3"></textarea></label><label>Linguagem<textarea id="literature-language" rows="3"></textarea></label>
+          <label class="span-2">Contexto histórico<textarea id="literature-context" rows="3"></textarea></label><label class="span-2">Anotações<textarea id="literature-notes" rows="4"></textarea></label><label class="span-2">Trechos importantes<textarea id="literature-passages" rows="4"></textarea></label><label class="span-2">Questões relacionadas à obra<textarea id="literature-questions" rows="4"></textarea></label><button class="primary-button span-2" type="submit">Salvar ficha de leitura</button>
         </div>
       </form>
     </dialog>
 
-    <noscript>Ative o JavaScript para acompanhar seu progresso.</noscript>
-    <script src="script.js"></script>
+    <dialog class="app-dialog form-dialog" id="exam-dialog" aria-labelledby="exam-dialog-title">
+      <form class="dialog-shell" id="exam-form">
+        <header class="dialog-header"><div><p class="eyebrow">Banco pessoal</p><h2 id="exam-dialog-title">Cadastrar questão</h2></div><button class="dialog-close" data-close-dialog="exam-dialog" type="button" aria-label="Fechar">×</button></header>
+        <div class="dialog-body form-stack"><div class="form-row"><label>Instituição<select id="exam-institution"><option>CEFET-MG</option><option>COLTEC</option></select></label><label>Ano<input id="exam-year" type="number" min="1990" max="2100" /></label></div><label>Matéria<select id="exam-subject" required></select></label><fieldset class="topic-checklist-field"><legend>Conteúdos relacionados</legend><div id="exam-topic-options"></div></fieldset><div class="form-row"><label>Resultado<select id="exam-result"><option value="unanswered">Não respondida</option><option value="correct">Acerto</option><option value="incorrect">Erro</option></select></label><label>Dificuldade<select id="exam-difficulty"><option>Fácil</option><option selected>Média</option><option>Difícil</option></select></label></div><label>Observação<textarea id="exam-observation" rows="3"></textarea></label><label>Resolução<textarea id="exam-solution" rows="4"></textarea></label><button class="primary-button" type="submit">Salvar questão</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="app-dialog settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+      <div class="dialog-shell">
+        <header class="dialog-header"><div><p class="eyebrow">Preferências</p><h2 id="settings-title">Configurações</h2></div><button class="dialog-close" data-close-dialog="settings-dialog" type="button" aria-label="Fechar">×</button></header>
+        <div class="dialog-body">
+          <section class="settings-section"><div class="setting-row"><div><h3>Revisões espaçadas</h3><p>Mostra conteúdos no momento certo para reforçar a memória.</p></div><label class="switch"><input id="reviews-enabled" type="checkbox" /><span aria-hidden="true"></span><span class="sr-only">Ativar revisões</span></label></div><fieldset class="interval-settings" id="interval-settings"><legend>Intervalos após cada revisão</legend><div class="interval-inputs"><label>1ª <input id="interval-1" type="number" min="1" max="365" /> dias</label><label>2ª <input id="interval-2" type="number" min="1" max="365" /> dias</label><label>3ª <input id="interval-3" type="number" min="1" max="365" /> dias</label><label>4ª <input id="interval-4" type="number" min="1" max="365" /> dias</label></div></fieldset><div class="setting-row compact"><div><h3>Reabrir ao esquecer</h3><p>Move para “Estudando” quando você marcar “Esqueci”.</p></div><label class="switch"><input id="reopen-forgotten" type="checkbox" /><span aria-hidden="true"></span><span class="sr-only">Reabrir conteúdos esquecidos</span></label></div><label class="setting-number">Considerar conteúdo sem revisão há <input id="stale-review-days" type="number" min="7" max="180" /> dias</label><button class="primary-button save-settings" id="save-settings" type="button">Salvar configurações</button></section>
+          <section class="settings-section"><h3>Backup dos dados</h3><p>Exporte progresso, erros, obras, revisões e questões.</p><div class="backup-actions"><button class="secondary-button" id="export-data" type="button">Exportar backup</button><label class="secondary-button file-button">Importar backup<input id="import-data" type="file" accept="application/json,.json" /></label></div></section>
+          <section class="settings-section danger-zone"><div><h3>Reiniciar todos os dados</h3><p>Restaura a estação para o estado inicial.</p></div><button class="danger-button" id="reset-progress" type="button">Reiniciar</button></section>
+        </div>
+      </div>
+    </dialog>
+    <dialog class="app-dialog confirm-dialog" id="reset-dialog" aria-labelledby="reset-dialog-title"><form method="dialog"><span class="dialog-icon" aria-hidden="true">↺</span><h2 id="reset-dialog-title">Reiniciar toda a estação?</h2><p>Progresso, práticas, anotações, erros, obras e questões serão apagados. Exporte um backup antes se quiser guardar uma cópia.</p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="danger-button" value="confirm">Sim, reiniciar</button></div></form></dialog>
+    <noscript>Ative o JavaScript para utilizar a estação de estudos.</noscript>
+    <script src="subjects.js"></script><script src="storage.js"></script><script src="script.js"></script>
   </body>
 </html>
