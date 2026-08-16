@@ -3,6 +3,8 @@
 
   const { subjects, schedule } = window.TRAJETORIA_DATA;
   const Storage = window.TrajetoriaStorage;
+  const Continuous = window.TrajetoriaContinuous;
+  const continuousTrails = window.TRAJETORIA_CONTINUOUS.trails;
   const { allTopics, DAY_MS } = Storage;
   const STATUS_WEIGHT = { "not-started": 0, studying: 0.34, consolidating: 0.67, mastered: 1 };
   const STATUS_LABEL = {
@@ -22,6 +24,7 @@
   let state = Storage.loadState();
   let activeView = "home";
   let activeSubjectId = "matematica";
+  let activeTrailId = "violao";
   let currentTopicId = null;
   let currentStatusFilter = "all";
   let currentErrorFilter = "open";
@@ -32,8 +35,10 @@
   function initialize() {
     cacheElements();
     renderSubjectNavigation();
+    renderContinuousNavigation();
     populateSubjectSelects();
     bindStaticEvents();
+    Continuous.initialize({ navigate, renderCurrentView, showToast });
     navigateFromHash();
     updateNavigationBadges();
     initializeCloudSync();
@@ -41,7 +46,7 @@
 
   function cacheElements() {
     const ids = [
-      "sidebar", "close-menu", "open-menu", "sidebar-backdrop", "subject-navigation",
+      "sidebar", "close-menu", "open-menu", "sidebar-backdrop", "subject-navigation", "continuous-navigation",
       "open-settings", "mobile-settings", "main-content", "nav-errors-count",
       "nav-review-count", "toast", "topic-dialog", "topic-dialog-block",
       "topic-dialog-title", "topic-review-date", "state-picker", "review-panel",
@@ -78,6 +83,14 @@
     `).join("");
   }
 
+  function renderContinuousNavigation() {
+    elements.continuousNavigation.innerHTML = continuousTrails.map((trail) => `
+      <button class="nav-item continuous-nav-item" type="button" data-view="trail" data-trail-id="${trail.id}">
+        <span class="nav-icon" aria-hidden="true">${trail.icon}</span><span>${escapeHTML(trail.name)}</span>
+      </button>
+    `).join("");
+  }
+
   function populateSubjectSelects() {
     const options = subjects.map((subject) => `<option value="${subject.id}">${escapeHTML(subject.name)}</option>`).join("");
     elements.globalErrorSubject.innerHTML = options;
@@ -94,7 +107,13 @@
         activeView = "subject";
         activeSubjectId = subjectId;
       }
-    } else if (["literatura", "errors", "review", "exams"].includes(path)) {
+    } else if (path.startsWith("trilha/")) {
+      const trailId = path.split("/")[1];
+      if (continuousTrails.some((trail) => trail.id === trailId)) {
+        activeView = "trail";
+        activeTrailId = trailId;
+      }
+    } else if (["literatura", "errors", "review", "exams", "continuous"].includes(path)) {
       activeView = path;
     } else {
       activeView = "home";
@@ -102,12 +121,13 @@
     renderCurrentView();
   }
 
-  function navigate(view, subjectId = null, pushHash = true) {
+  function navigate(view, targetId = null, pushHash = true) {
     activeView = view;
-    if (subjectId) activeSubjectId = subjectId;
+    if (view === "subject" && targetId) activeSubjectId = targetId;
+    if (view === "trail" && targetId) activeTrailId = targetId;
     currentStatusFilter = "all";
     if (pushHash) {
-      const nextHash = view === "home" ? "#home" : view === "subject" ? `#materia/${activeSubjectId}` : `#${view}`;
+      const nextHash = view === "home" ? "#home" : view === "subject" ? `#materia/${activeSubjectId}` : view === "trail" ? `#trilha/${activeTrailId}` : `#${view}`;
       if (location.hash !== nextHash) history.pushState(null, "", nextHash);
     }
     closeSidebar();
@@ -118,6 +138,8 @@
 
   function renderCurrentView() {
     if (activeView === "subject") renderSubjectPage(findSubject(activeSubjectId));
+    else if (activeView === "trail") Continuous.renderTrailPage(elements.mainContent, activeTrailId);
+    else if (activeView === "continuous") Continuous.renderContinuousHome(elements.mainContent);
     else if (activeView === "literatura") renderLiteraturePage();
     else if (activeView === "errors") renderErrorsPage();
     else if (activeView === "review") renderWeeklyReviewPage();
@@ -136,9 +158,10 @@
 
     elements.mainContent.innerHTML = `
       <section class="page-intro home-intro">
-        <div><p class="eyebrow">${escapeHTML(dateLabel)}</p><h1>O que estudar agora?</h1><p class="intro-copy">Uma visão clara do seu dia, sem transformar estudo em burocracia.</p></div>
+        <div><p class="eyebrow">${escapeHTML(dateLabel)}</p><h1>Minha Formação</h1><p class="intro-copy">Uma visão clara da prioridade acadêmica atual e dos caminhos que continuam por toda a vida.</p></div>
         ${renderLastActivity()}
       </section>
+      <section class="home-priority"><div><p class="eyebrow">Objetivo atual · prioridade acadêmica</p><h2>CEFET / COLTEC</h2><p>O painel de preparação continua sendo o foco principal desta fase.</p></div><span>O que estudar agora?</span></section>
       ${renderDailyRoutine(todaySchedule)}
       ${renderFocusCard(focus, "Foco recomendado agora")}
       <section class="overview home-overview" aria-label="Resumo geral">
@@ -155,6 +178,7 @@
         <div class="section-heading"><div><p class="eyebrow">Visão por matéria</p><h2>Seu avanço</h2></div></div>
         <div class="subject-progress-grid">${subjects.map(renderSubjectProgressCard).join("")}</div>
       </section>
+      ${Continuous.renderHomeSection()}
       ${renderRecentActivitySection()}
     `;
   }
@@ -775,7 +799,7 @@
   }
 
   function exportData() {
-    const backup = { app: "trajetoria", version: Storage.APP_VERSION, exportedAt: new Date().toISOString(), data: state };
+    const backup = { app: "trajetoria", version: Storage.APP_VERSION, exportedAt: new Date().toISOString(), data: state, continuousData: Continuous.exportState() };
     const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
@@ -796,6 +820,7 @@
         const parsed = JSON.parse(String(reader.result));
         if (!parsed.data?.topics || !["trajetoria", "trajetoria-matematica"].includes(parsed.app)) throw new Error("Formato inválido");
         state = parsed.app === "trajetoria-matematica" ? Storage.migrateV2(parsed.data) : Storage.normalizeState(parsed.data);
+        if (parsed.continuousData) Continuous.importState(parsed.continuousData);
         persist();
         closeDialog(elements.settingsDialog);
         renderCurrentView();
@@ -812,6 +837,7 @@
 
   function resetAll() {
     state = Storage.createDefaultState();
+    Continuous.resetState();
     persist();
     closeDialog(elements.resetDialog);
     closeDialog(elements.settingsDialog);
@@ -874,7 +900,9 @@
 
   function updateActiveNavigation() {
     document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
-      const matches = button.dataset.view === activeView && (activeView !== "subject" || button.dataset.subjectId === activeSubjectId);
+      const matches = button.dataset.view === activeView
+        && (activeView !== "subject" || button.dataset.subjectId === activeSubjectId)
+        && (activeView !== "trail" || button.dataset.trailId === activeTrailId);
       button.classList.toggle("active", matches);
       if (matches) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     });
@@ -884,7 +912,7 @@
     document.addEventListener("click", (event) => {
       const nav = event.target.closest("[data-view]");
       if (nav && (nav.classList.contains("nav-item") || nav.classList.contains("nav-button"))) {
-        navigate(nav.dataset.view, nav.dataset.subjectId || null);
+        navigate(nav.dataset.view, nav.dataset.subjectId || nav.dataset.trailId || null);
       }
     });
     window.addEventListener("popstate", navigateFromHash);
@@ -932,12 +960,15 @@
   }
 
   function handleMainClick(event) {
+    const continuousAction = event.target.closest("[data-continuous-action]");
+    if (continuousAction && Continuous.handleAction(continuousAction)) return;
     const action = event.target.closest("[data-action]");
     if (!action) return;
     const name = action.dataset.action;
     if (name === "open-topic") openTopicDialog(action.dataset.topicId);
     else if (name === "quick-topic") setTopicStatus(action.dataset.topicId, state.topics[action.dataset.topicId].status === "mastered" ? "consolidating" : "mastered");
     else if (name === "navigate-subject") navigate("subject", action.dataset.subjectId);
+    else if (name === "navigate-trail") navigate("trail", action.dataset.trailId);
     else if (name === "navigate") navigate(action.dataset.viewTarget);
     else if (name === "toggle-block") { const id = action.dataset.blockId; expandedBlocks.has(id) ? expandedBlocks.delete(id) : expandedBlocks.add(id); renderSubjectPage(findSubject(activeSubjectId)); }
     else if (name === "toggle-all-blocks") { const subject = findSubject(activeSubjectId); const allExpanded = subject.blocks.every((block) => expandedBlocks.has(block.id)); subject.blocks.forEach((block) => allExpanded ? expandedBlocks.delete(block.id) : expandedBlocks.add(block.id)); renderSubjectPage(subject); }

@@ -1,9 +1,10 @@
-# Trajetória — Central de estudos CEFET-MG e COLTEC
+# Trajetória — Painel de Formação Pessoal
 
-Estação pessoal, responsiva e sem dependências para organizar a preparação para
-as provas do CEFET-MG e COLTEC. A plataforma responde primeiro à pergunta **“o
-que eu deveria estudar agora?”** e mantém a filosofia **“domine um conceito de
-cada vez”** em todas as matérias.
+Estação pessoal, responsiva e sem dependências. A preparação para CEFET-MG e
+COLTEC permanece como objetivo acadêmico prioritário; uma área secundária de
+Formação Contínua organiza Violão, Xadrez, Desenho, Inglês e História da Arte.
+O painel responde primeiro a **“o que devo praticar agora?”** sem transformar
+habilidades permanentes em uma porcentagem enganosa de conclusão total.
 
 ## Como executar
 
@@ -20,9 +21,30 @@ Não há instalação, servidor, framework ou biblioteca externa.
 - `subjects.js`: catálogo curricular e rotina semanal.
 - `storage.js`: estado inicial, normalização, persistência e migrações.
 - `script.js`: recomendações, renderização, interações e módulos especiais.
+- `data/continuous-core.js`: configuração e construtor comum das trilhas.
+- `data/violao.js`, `xadrez.js`, `desenho.js`, `ingles.js` e
+  `historia-arte.js`: currículos editáveis da Formação Contínua.
+- `continuous-storage.js`: estado, normalização e desbloqueios das trilhas.
+- `continuous.js`: cards, caminhos, sessões, revisão e registros mínimos.
 - `.vscode/settings.json`: preferência local do Live Server.
 
 ## Áreas disponíveis
+
+### Minha Formação
+
+A página inicial separa explicitamente:
+
+- **Objetivo atual:** CEFET / COLTEC, com o painel completo já existente;
+- **Formação contínua:** cinco cards que mostram etapa, habilidade atual,
+  dificuldade registrada e botão **Continuar**.
+
+Cada trilha oferece sessões flexíveis de 10, 20 ou 40 minutos e uma opção livre.
+Ao terminar, basta registrar **Consegui**, **Parcial** ou **Travei**, com nota
+opcional. Habilidades consolidadas retornam numa fila simples de revisão.
+
+Violão inclui repertório; Xadrez registra erros de partidas; Inglês acompanha
+sete competências separadamente; História da Arte usa uma linha do tempo e
+eixos transversais; Desenho e História da Arte possuem conexões contextuais.
 
 ### Painel inicial
 
@@ -108,6 +130,12 @@ o estado também é sincronizado com a tabela `study_progress` do Supabase. O si
 usa somente a chave publicável; o acesso individual é protegido pelas políticas
 RLS configuradas no banco.
 
+A Formação Contínua usa uma chave independente,
+`trajetoria-formacao-continua-v1`. Essa separação evita qualquer alteração ou
+perda do progresso CEFET anterior. O backup exportado inclui as duas áreas. A
+sincronização Supabase existente continua cobrindo a preparação CEFET/COLTEC;
+as cinco novas trilhas permanecem locais nesta etapa.
+
 Ao abrir esta versão pela primeira vez, dados das chaves anteriores
 `trajetoria-matematica-v2` e `trajetoria-matematica-v1` são migrados
 automaticamente. A migração preserva estados, práticas, confiança, anotações,
@@ -147,6 +175,9 @@ Os arquivos do projeto e a pasta `.vscode` podem permanecer na raiz do
 repositório. Em **Settings → Pages**, use o branch `main` e a pasta `/ (root)`.
 Como os caminhos de CSS e JavaScript são relativos, o site funciona como página
 de projeto sem ajustes adicionais.
+
+O projeto ainda não é PWA e não instala service worker, manifesto, login novo ou
+backend adicional.
 
 Sem login, o progresso continua separado por dispositivo e navegador. Com o
 mesmo e-mail conectado, alterações são enviadas ao Supabase e recuperadas nos
