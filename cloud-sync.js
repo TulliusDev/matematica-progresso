@@ -19,6 +19,7 @@
     let session = null;
     let saveTimer = null;
     let saving = false;
+    let synchronizing = false;
     let pendingState = null;
 
     function notify(status, detail = "") {
@@ -75,6 +76,10 @@
 
     async function flush() {
       if (!session || saving || !pendingState || !navigator.onLine) return;
+      if (synchronizing) {
+        saveTimer = setTimeout(flush, SAVE_DELAY);
+        return;
+      }
       const nextState = pendingState;
       pendingState = null;
       saving = true;
@@ -93,6 +98,8 @@
 
     async function synchronize() {
       if (!session || !navigator.onLine) return notify("offline", "Sem internet; usando os dados deste dispositivo.");
+      if (saving || synchronizing) return;
+      synchronizing = true;
       notify("loading", "Buscando seus dados…");
       try {
         const remote = await fetchRow();
@@ -102,24 +109,34 @@
           return notify("synced", `Primeira sincronização concluída · ${session.user.email}`);
         }
         const knownRevision = getRevision(session.user.id);
-        if (!knownRevision) {
-          options.applyState(remote.data);
-          setRevision(session.user.id, remote.revision);
-        } else if (knownRevision < remote.revision) {
-          const merged = options.mergeStates(local, remote.data);
-          options.applyState(merged);
+        const merged = options.mergeStates(local, remote.data, { firstSync: !knownRevision });
+        if (!statesEqual(local, merged)) options.applyState(merged);
+        if (!statesEqual(remote.data, merged)) {
           await updateRow(merged, remote.revision);
+        } else {
+          setRevision(session.user.id, remote.revision);
         }
         notify("synced", `Sincronizado agora · ${session.user.email}`);
-      } catch (error) { notify("error", friendlyError(error)); }
+      } catch (error) {
+        notify("error", friendlyError(error));
+      } finally {
+        synchronizing = false;
+        if (pendingState && navigator.onLine) saveTimer = setTimeout(flush, SAVE_DELAY);
+      }
     }
 
     async function pushState(local) {
       const remote = await fetchRow();
       if (!remote) return insertRow(local);
       const knownRevision = getRevision(session.user.id);
-      const data = knownRevision && knownRevision < remote.revision ? options.mergeStates(local, remote.data) : local;
-      if (data !== local) options.applyState(data);
+      const latestLocal = options.getState();
+      const localWithPending = options.mergeStates(latestLocal, local, { firstSync: false });
+      const data = options.mergeStates(localWithPending, remote.data, { firstSync: !knownRevision });
+      if (!statesEqual(data, latestLocal)) options.applyState(data);
+      if (statesEqual(data, remote.data)) {
+        setRevision(session.user.id, remote.revision);
+        return;
+      }
       return updateRow(data, remote.revision);
     }
 
@@ -132,7 +149,16 @@
     async function insertRow(data) {
       const { error } = await client.from("study_progress").insert({ user_id: session.user.id, data, revision: 1, updated_at: new Date().toISOString() });
       if (error) {
-        if (error.code === "23505") return synchronize();
+        if (error.code === "23505") {
+          const remote = await fetchRow();
+          if (!remote) throw error;
+          const local = options.getState();
+          const merged = options.mergeStates(local, remote.data, { firstSync: !getRevision(session.user.id) });
+          if (!statesEqual(local, merged)) options.applyState(merged);
+          if (!statesEqual(remote.data, merged)) return updateRow(merged, remote.revision);
+          setRevision(session.user.id, remote.revision);
+          return;
+        }
         throw error;
       }
       setRevision(session.user.id, 1);
@@ -151,6 +177,10 @@
     function updateAuthUI() { options.onAuth?.(session?.user || null); }
     window.addEventListener("online", () => pendingState ? flush() : synchronize());
     window.addEventListener("offline", () => notify("offline", "Sem internet; alterações salvas neste dispositivo."));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || !session) return;
+      pendingState ? flush() : synchronize();
+    });
     return { initialize, signIn, signOut, synchronize, queueSave, flush };
   }
 
@@ -164,6 +194,7 @@
     localStorage.setItem(REVISION_KEY, JSON.stringify(revisions));
   }
   function clone(value) { return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)); }
+  function statesEqual(first, second) { return JSON.stringify(first) === JSON.stringify(second); }
   function withTimeout(promise, milliseconds) {
     return Promise.race([
       promise,

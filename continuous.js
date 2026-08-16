@@ -163,9 +163,12 @@
     if (!trail || !skill) return;
     const trailState = state.trails[trail.id];
     const skillState = trailState.skills[skill.id];
+    const now = new Date().toISOString();
     if (skillState.status === "available") skillState.status = "learning";
     trailState.currentSkillId = skill.id;
-    skillState.updatedAt = new Date().toISOString();
+    trailState.currentSkillUpdatedAt = now;
+    trailState.updatedAt = now;
+    skillState.updatedAt = now;
     persist();
     activeSession = { trailId, skillId, minutes };
     const due = trail.skills.find((candidate) => candidate.id !== skill.id && Storage.due(getSkillState(trail.id, candidate.id)));
@@ -197,6 +200,7 @@
     skillState.practiceLog = skillState.practiceLog.slice(-100);
     skillState.lastPractice = now;
     skillState.updatedAt = now;
+    state.trails[trail.id].updatedAt = now;
     if (note) skillState.notes = note.slice(0, 1200);
     if (result === "stuck") {
       skillState.status = "learning";
@@ -230,6 +234,8 @@
     skillState.review = { step: 0, nextAt: Storage.addDays(DATA.config.reviewIntervals[0]) };
     Storage.reconcileUnlocks(state, trail);
     state.trails[trail.id].currentSkillId = null;
+    state.trails[trail.id].currentSkillUpdatedAt = now;
+    state.trails[trail.id].updatedAt = now;
     persist();
     closeDialog();
     host.renderCurrentView?.();
@@ -292,14 +298,18 @@
       event.preventDefault();
       const data = new FormData(event.target);
       const trailId = event.target.dataset.trailId;
-      state.trails[trailId].repertoire.push({ id: Storage.id(), title: data.get("title").trim(), status: data.get("status"), problem: data.get("problem").trim(), skillIds: [], updatedAt: new Date().toISOString() });
+      const now = new Date().toISOString();
+      state.trails[trailId].repertoire.push({ id: Storage.id(), title: data.get("title").trim(), status: data.get("status"), problem: data.get("problem").trim(), skillIds: [], updatedAt: now });
+      state.trails[trailId].updatedAt = now;
       persist(); host.renderCurrentView?.(); toast("Música adicionada ao repertório.");
     } else if (event.target.id === "chess-game-form") {
       event.preventDefault();
       const data = new FormData(event.target);
       const trailId = event.target.dataset.trailId;
-      state.trails[trailId].games.push({ id: Storage.id(), category: data.get("category"), result: data.get("result").trim(), note: data.get("note").trim(), date: new Date().toISOString() });
+      const now = new Date().toISOString();
+      state.trails[trailId].games.push({ id: Storage.id(), category: data.get("category"), result: data.get("result").trim(), note: data.get("note").trim(), date: now });
       state.trails[trailId].games = state.trails[trailId].games.slice(-100);
+      state.trails[trailId].updatedAt = now;
       persist(); host.renderCurrentView?.(); toast("Partida registrada para análise.");
     }
   }
@@ -307,20 +317,27 @@
   function handlePageChange(event) {
     const action = event.target.dataset.continuousChange;
     if (action === "repertoire-status") {
-      const item = state.trails[event.target.dataset.trailId].repertoire.find((candidate) => candidate.id === event.target.dataset.itemId);
-      if (item) { item.status = event.target.value; item.updatedAt = new Date().toISOString(); persist(); toast("Situação do repertório atualizada."); }
+      const trailState = state.trails[event.target.dataset.trailId];
+      const item = trailState.repertoire.find((candidate) => candidate.id === event.target.dataset.itemId);
+      if (item) { const now = new Date().toISOString(); item.status = event.target.value; item.updatedAt = now; trailState.updatedAt = now; persist(); toast("Situação do repertório atualizada."); }
     }
   }
 
   function deleteRepertoire(trailId, itemId) {
-    state.trails[trailId].repertoire = state.trails[trailId].repertoire.filter((item) => item.id !== itemId);
+    const trailState = state.trails[trailId];
+    const now = new Date().toISOString();
+    trailState.repertoire = trailState.repertoire.filter((item) => item.id !== itemId);
+    trailState.deletedRepertoire = trailState.deletedRepertoire.filter((item) => item.id !== itemId);
+    trailState.deletedRepertoire.push({ id: itemId, deletedAt: now });
+    trailState.updatedAt = now;
     persist(); host.renderCurrentView?.(); toast("Música removida do repertório.");
   }
 
   function exportState() { return state; }
-  function importState(candidate) { state = Storage.normalizeState(candidate); persist(); }
-  function resetState() { state = Storage.createDefaultState(); persist(); }
-  function persist() { Storage.saveState(state); }
+  function importState(candidate) { state = Storage.normalizeState(candidate); Storage.saveState(state); }
+  function resetState() { state = Storage.createDefaultState(); Storage.saveState(state); }
+  function mergeStates(localCandidate, remoteCandidate) { return Storage.mergeStates(localCandidate, remoteCandidate); }
+  function persist() { Storage.saveState(state); host.queueCloudSave?.(); }
   function findTrail(trailId) { return DATA.trails.find((trail) => trail.id === trailId) || null; }
   function findSkill(trail, skillId) { return trail?.skills.find((skill) => skill.id === skillId) || null; }
   function getSkillState(trailId, skillId) { return state.trails[trailId].skills[skillId]; }
@@ -331,5 +348,5 @@
   function formatDate(value) { return new Date(value).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }); }
   function escapeHTML(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
 
-  window.TrajetoriaContinuous = { initialize, renderHomeSection, renderContinuousHome, renderTrailPage, handleAction, exportState, importState, resetState };
+  window.TrajetoriaContinuous = { initialize, renderHomeSection, renderContinuousHome, renderTrailPage, handleAction, exportState, importState, resetState, mergeStates };
 })();

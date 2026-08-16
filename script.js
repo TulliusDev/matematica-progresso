@@ -31,14 +31,16 @@
   let currentErrorSubject = "all";
   let toastTimer;
   let cloudSync = null;
+  let deferredInstallPrompt = null;
 
   function initialize() {
     cacheElements();
+    initializePwa();
     renderSubjectNavigation();
     renderContinuousNavigation();
     populateSubjectSelects();
     bindStaticEvents();
-    Continuous.initialize({ navigate, renderCurrentView, showToast });
+    Continuous.initialize({ navigate, renderCurrentView, showToast, queueCloudSave: queueCloudState });
     navigateFromHash();
     updateNavigationBadges();
     initializeCloudSync();
@@ -63,7 +65,7 @@
       "reopen-forgotten", "stale-review-days", "save-settings", "export-data",
       "import-data", "reset-progress", "reset-dialog", "sync-summary", "sync-summary-text",
       "sync-detail", "sync-login", "sync-email", "sync-account", "sync-user-email",
-      "sync-now", "sync-sign-out",
+      "sync-now", "sync-sign-out", "pwa-install-section", "pwa-install",
     ];
     ids.forEach((id) => {
       elements[toCamel(id)] = document.getElementById(id);
@@ -852,18 +854,61 @@
   }
 
   function persist() {
-    try { Storage.saveState(state); cloudSync?.queueSave(state); }
+    try { Storage.saveState(state); queueCloudState(); }
     catch (error) { console.warn("Não foi possível salvar.", error); showToast("Não foi possível salvar neste navegador."); }
+  }
+
+  function getCloudState() {
+    return { ...state, continuousData: Continuous.exportState() };
+  }
+
+  function mergeCloudStates(localCandidate, remoteCandidate, context = {}) {
+    const localCefet = Storage.normalizeState(localCandidate || {});
+    const remoteCefet = Storage.normalizeState(remoteCandidate || {});
+    const mergedCefet = Storage.mergeStates(localCefet, remoteCefet);
+    if (context.firstSync && remoteCandidate?.topics) {
+      const defaults = Storage.createDefaultState();
+      Storage.allTopics.forEach((topic) => {
+        if (!hasLocalCefetEvidence(localCefet.topics[topic.id], defaults.topics[topic.id])) {
+          mergedCefet.topics[topic.id] = remoteCefet.topics[topic.id];
+        }
+      });
+      if (JSON.stringify(localCefet.settings) === JSON.stringify(defaults.settings)) {
+        mergedCefet.settings = remoteCefet.settings;
+      }
+    }
+    const localContinuous = localCandidate?.continuousData || Continuous.exportState();
+    const remoteContinuous = remoteCandidate?.continuousData || null;
+    return {
+      ...mergedCefet,
+      continuousData: Continuous.mergeStates(localContinuous, remoteContinuous),
+    };
+  }
+
+  function hasLocalCefetEvidence(topicState, defaultState) {
+    return topicState.status !== defaultState.status
+      || topicState.confidence > 0
+      || Boolean(topicState.notes)
+      || topicState.attempts.length > 0
+      || topicState.errors.length > 0
+      || Boolean(topicState.startedAt)
+      || Boolean(topicState.review.lastAt)
+      || topicState.review.step > 0;
+  }
+
+  function queueCloudState() {
+    cloudSync?.queueSave(getCloudState());
   }
 
   function initializeCloudSync() {
     if (!window.TrajetoriaCloud) return;
     cloudSync = window.TrajetoriaCloud.create({
-      getState: () => state,
-      mergeStates: Storage.mergeStates,
+      getState: getCloudState,
+      mergeStates: mergeCloudStates,
       applyState(nextState) {
         state = Storage.normalizeState(nextState);
         Storage.saveState(state);
+        if (nextState?.continuousData) Continuous.importState(nextState.continuousData);
         renderCurrentView();
         if (elements.topicDialog.open) populateTopicDialog();
       },
@@ -955,6 +1000,7 @@
       try { await cloudSync.signOut(); showToast("Você saiu da sincronização."); }
       catch (error) { showToast(error.message); }
     });
+    elements.pwaInstall.addEventListener("click", installPwa);
     elements.resetProgress.addEventListener("click", () => { closeDialog(elements.settingsDialog); openDialog(elements.resetDialog); });
     elements.resetDialog.addEventListener("close", () => { if (elements.resetDialog.returnValue === "confirm") resetAll(); });
   }
@@ -1010,6 +1056,42 @@
   function openDialog(dialog) { if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", ""); }
   function closeDialog(dialog) { if (!dialog?.open) return; if (typeof dialog.close === "function") dialog.close(); else dialog.removeAttribute("open"); }
   function showToast(message) { clearTimeout(toastTimer); elements.toast.textContent = message; elements.toast.classList.add("visible"); toastTimer = setTimeout(() => elements.toast.classList.remove("visible"), 3000); }
+
+  function initializePwa() {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    if (!standalone) {
+      window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        elements.pwaInstallSection.hidden = false;
+      });
+    }
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      elements.pwaInstallSection.hidden = true;
+      showToast("Aplicativo instalado.");
+    });
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js", { scope: "./" })
+          .catch((error) => console.warn("Não foi possível registrar o modo offline.", error));
+      }, { once: true });
+    }
+  }
+
+  async function installPwa() {
+    if (!deferredInstallPrompt) return;
+    const prompt = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    elements.pwaInstallSection.hidden = true;
+    try {
+      await prompt.prompt();
+      const { outcome } = await prompt.userChoice;
+      if (outcome !== "accepted") showToast("Instalação cancelada. Você pode tentar novamente pelo menu do navegador.");
+    } catch (error) {
+      console.warn("Não foi possível abrir a instalação da PWA.", error);
+    }
+  }
 
   document.addEventListener("DOMContentLoaded", initialize);
 })();

@@ -12,7 +12,8 @@ Abra `index.html` diretamente em um navegador moderno. Também é possível usar
 extensão Live Server do VS Code; o projeto já mantém a configuração da porta
 `5501` em `.vscode/settings.json`.
 
-Não há instalação, servidor, framework ou biblioteca externa.
+Não há build, servidor ou framework. O SDK do Supabase é carregado pelo CDN e a
+PWA usa somente APIs nativas do navegador.
 
 ## Estrutura do projeto
 
@@ -26,6 +27,9 @@ Não há instalação, servidor, framework ou biblioteca externa.
   `historia-arte.js`: currículos editáveis da Formação Contínua.
 - `continuous-storage.js`: estado, normalização e desbloqueios das trilhas.
 - `continuous.js`: cards, caminhos, sessões, revisão e registros mínimos.
+- `manifest.webmanifest`: nome, escopo, cores e ícones da PWA.
+- `service-worker.js`: cache versionado do shell local e abertura offline.
+- `icons/`: ícones de instalação e da tela inicial.
 - `.vscode/settings.json`: preferência local do Live Server.
 
 ## Áreas disponíveis
@@ -130,11 +134,12 @@ o estado também é sincronizado com a tabela `study_progress` do Supabase. O si
 usa somente a chave publicável; o acesso individual é protegido pelas políticas
 RLS configuradas no banco.
 
-A Formação Contínua usa uma chave independente,
+A Formação Contínua usa uma chave local independente,
 `trajetoria-formacao-continua-v1`. Essa separação evita qualquer alteração ou
-perda do progresso CEFET anterior. O backup exportado inclui as duas áreas. A
-sincronização Supabase existente continua cobrindo a preparação CEFET/COLTEC;
-as cinco novas trilhas permanecem locais nesta etapa.
+perda do progresso CEFET anterior. O backup exportado inclui as duas áreas. Ao
+entrar com a mesma conta, o payload JSON do registro `study_progress` também
+leva `continuousData`; o merge ocorre por trilha, habilidade e item antes de
+atualizar qualquer armazenamento local.
 
 Ao abrir esta versão pela primeira vez, dados das chaves anteriores
 `trajetoria-matematica-v2` e `trajetoria-matematica-v1` são migrados
@@ -176,8 +181,28 @@ repositório. Em **Settings → Pages**, use o branch `main` e a pasta `/ (root)
 Como os caminhos de CSS e JavaScript são relativos, o site funciona como página
 de projeto sem ajustes adicionais.
 
-O projeto ainda não é PWA e não instala service worker, manifesto, login novo ou
-backend adicional.
+## PWA
+
+O site pode ser instalado como **Trajetória** no Android, em navegadores que
+ofereçam a instalação, ou pelo comando **Adicionar à Tela de Início** do Safari
+no iPhone/iPad. O botão **Instalar aplicativo** aparece nas configurações apenas
+quando o navegador informa que a instalação nativa está disponível.
+
+O service worker mantém em cache o HTML, CSS, scripts, currículos e ícones
+locais. Assim, depois do primeiro acesso online, a interface abre offline e os
+dados continuam sendo lidos e gravados no `localStorage`. O service worker não
+intercepta nem replica a sincronização: chamadas ao Supabase continuam indo
+diretamente à rede e o mecanismo existente envia alterações quando a conexão
+volta.
+
+O HTML usa rede primeiro e cache como alternativa; os demais arquivos locais
+usam cache com atualização em segundo plano. Para uma publicação que altere o
+shell, incremente `static-v1` e `runtime-v1` em `service-worker.js`. O novo worker
+assume o controle, remove caches antigos e a versão atualizada aparece na
+próxima abertura/navegação, sem recarregamentos automáticos em ciclo.
+
+O manifesto e o registro usam caminhos relativos, portanto funcionam tanto no
+domínio principal quanto no subdiretório do GitHub Pages.
 
 Sem login, o progresso continua separado por dispositivo e navegador. Com o
 mesmo e-mail conectado, alterações são enviadas ao Supabase e recuperadas nos

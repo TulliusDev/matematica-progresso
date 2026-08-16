@@ -1730,6 +1730,7 @@ noscript {
 /* Estação multidisciplinar: extensão da identidade original */
 .app-layout {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
@@ -1861,6 +1862,21 @@ noscript {
   margin: 8px 10px 2px;
   color: #5d6572;
   font-size: 9px;
+}
+
+.install-settings {
+  display: grid;
+  gap: 18px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.install-settings[hidden] {
+  display: none;
+}
+
+.install-settings .secondary-button {
+  white-space: nowrap;
 }
 
 .app-main {
@@ -2732,6 +2748,29 @@ noscript {
     backdrop-filter: blur(15px);
   }
 
+  @supports (padding: env(safe-area-inset-top)) {
+    .mobile-topbar {
+      height: calc(62px + env(safe-area-inset-top));
+      padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+    }
+
+    .sidebar {
+      padding-left: env(safe-area-inset-left);
+    }
+
+    .sidebar-header {
+      padding-top: env(safe-area-inset-top);
+    }
+
+    .sidebar-footer {
+      padding-bottom: max(11px, env(safe-area-inset-bottom));
+    }
+
+    .toast {
+      bottom: max(16px, env(safe-area-inset-bottom));
+    }
+  }
+
   .app-main .container {
     padding-top: 42px;
   }
@@ -2757,6 +2796,11 @@ noscript {
 }
 
 @media (max-width: 660px) {
+  .install-settings {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
   .app-main .container {
     width: min(100% - 28px, 1180px);
     padding-top: 32px;
