@@ -27,6 +27,7 @@ PWA usa somente APIs nativas do navegador.
   `historia-arte.js`: currículos editáveis da Formação Contínua.
 - `continuous-storage.js`: estado, normalização e desbloqueios das trilhas.
 - `continuous.js`: cards, caminhos, sessões, revisão e registros mínimos.
+- `study.js`: cronômetros, intervalo, restauração, histórico e constância.
 - `manifest.webmanifest`: nome, escopo, cores e ícones da PWA.
 - `service-worker.js`: cache versionado do shell local e abertura offline.
 - `icons/`: ícones de instalação e da tela inicial.
@@ -42,9 +43,11 @@ A página inicial separa explicitamente:
 - **Formação contínua:** cinco cards que mostram etapa, habilidade atual,
   dificuldade registrada e botão **Continuar**.
 
-Cada trilha oferece sessões flexíveis de 10, 20 ou 40 minutos e uma opção livre.
-Ao terminar, basta registrar **Consegui**, **Parcial** ou **Travei**, com nota
-opcional. Habilidades consolidadas retornam numa fila simples de revisão.
+Cada trilha mantém um fluxo simples: abrir a habilidade atual, praticar, fazer um
+check-in de um toque e consolidar quando o critério estiver funcional. A próxima
+habilidade elegível passa a ser a atual automaticamente; registros detalhados
+anteriores continuam preservados e habilidades consolidadas ainda retornam para
+revisão.
 
 Violão inclui repertório; Xadrez registra erros de partidas; Inglês acompanha
 sete competências separadamente; História da Arte usa uma linha do tempo e
@@ -55,7 +58,10 @@ eixos transversais; Desenho e História da Arte possuem conexões contextuais.
 O painel considera automaticamente o dia da semana e mostra:
 
 - matéria principal e secundária;
-- duração prevista;
+- duas metas de duração e um intervalo configuráveis;
+- cronômetro crescente com pausa nas duas matérias;
+- temporizador regressivo no intervalo;
+- tempo real, histórico e constância dos últimos dias;
 - conteúdo recomendado;
 - revisões vencidas;
 - progresso geral e por matéria;
@@ -69,6 +75,9 @@ Uma revisão vencida tem prioridade. Depois, a recomendação segue esta ordem:
 3. primeiro conteúdo **Não iniciado** da matéria planejada.
 
 No sábado e domingo o painel oferece a revisão semanal, sem obrigar um dos dias.
+Nos dias úteis, a rotina acadêmica segue **matéria principal → intervalo → segunda
+matéria**. As metas padrão são 60, 15 e 30 minutos, respectivamente, e podem ser
+alteradas nas configurações sem interromper automaticamente uma sessão.
 
 ### Matérias
 
@@ -129,17 +138,22 @@ mesma matéria.
 ## Persistência, sincronização e migração
 
 Todos os dados continuam armazenados no `localStorage`, sob a chave
-`trajetoria-estudos-v3`, para que o site funcione offline. Ao entrar com e-mail,
-o estado também é sincronizado com a tabela `study_progress` do Supabase. O site
+`trajetoria-estudos-v3`, para que o site funcione offline. A mesma estrutura agora
+também contém metas, sessões concluídas/incompletas e intervalos. Ao entrar com
+e-mail, esses registros são sincronizados com a tabela `study_progress` do
+Supabase. O cronômetro ainda em andamento usa a chave local separada
+`trajetoria-study-timer-v1`: timestamps absolutos permitem restaurá-lo após
+recarregar ou suspender a PWA sem contar períodos em que estava pausado. O site
 usa somente a chave publicável; o acesso individual é protegido pelas políticas
 RLS configuradas no banco.
 
 A Formação Contínua usa uma chave local independente,
 `trajetoria-formacao-continua-v1`. Essa separação evita qualquer alteração ou
-perda do progresso CEFET anterior. O backup exportado inclui as duas áreas. Ao
-entrar com a mesma conta, o payload JSON do registro `study_progress` também
-leva `continuousData`; o merge ocorre por trilha, habilidade e item antes de
-atualizar qualquer armazenamento local.
+perda do progresso CEFET anterior. Check-ins leves reutilizam os registros já
+sincronizados dessa área. O backup exportado inclui as duas áreas. Ao entrar com
+a mesma conta, o payload JSON do registro `study_progress` também leva
+`continuousData`; o merge ocorre por trilha, habilidade e item antes de atualizar
+qualquer armazenamento local.
 
 Ao abrir esta versão pela primeira vez, dados das chaves anteriores
 `trajetoria-matematica-v2` e `trajetoria-matematica-v1` são migrados
@@ -197,7 +211,8 @@ volta.
 
 O HTML usa rede primeiro e cache como alternativa; os demais arquivos locais
 usam cache com atualização em segundo plano. Para uma publicação que altere o
-shell, incremente `static-v1` e `runtime-v1` em `service-worker.js`. O novo worker
+shell, incremente os sufixos de cache em `service-worker.js`; nesta revisão, eles
+são `static-v2` e `runtime-v2`. O novo worker
 assume o controle, remove caches antigos e a versão atualizada aparece na
 próxima abertura/navegação, sem recarregamentos automáticos em ciclo.
 

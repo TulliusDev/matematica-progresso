@@ -310,11 +310,11 @@
 
   const schedule = {
     0: { type: "weekly-review", label: "Revisão semanal flexível" },
-    1: { primary: { subjectId: "matematica", minutes: 50 }, secondary: { subjectId: "historia", minutes: 30 } },
-    2: { primary: { subjectId: "ciencias", minutes: 50 }, secondary: { subjectId: "matematica", minutes: 30 } },
-    3: { primary: { subjectId: "matematica", minutes: 50 }, secondary: { subjectId: "geografia", minutes: 30 } },
-    4: { primary: { subjectId: "historia", minutes: 50 }, secondary: { subjectId: "matematica", minutes: 30 } },
-    5: { primary: { subjectId: "matematica", minutes: 50 }, secondary: { subjectId: "portugues", minutes: 30 } },
+    1: { primary: { subjectId: "matematica" }, secondary: { subjectId: "historia" } },
+    2: { primary: { subjectId: "ciencias" }, secondary: { subjectId: "matematica" } },
+    3: { primary: { subjectId: "matematica" }, secondary: { subjectId: "geografia" } },
+    4: { primary: { subjectId: "historia" }, secondary: { subjectId: "matematica" } },
+    5: { primary: { subjectId: "matematica" }, secondary: { subjectId: "portugues" } },
     6: { type: "weekly-review", label: "Revisão semanal flexível" },
   };
 

@@ -1,8 +1,8 @@
 "use strict";
 
 const CACHE_PREFIX = "trajetoria-pwa-";
-const STATIC_CACHE = `${CACHE_PREFIX}static-v1`;
-const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v1`;
+const STATIC_CACHE = `${CACHE_PREFIX}static-v2`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v2`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -12,6 +12,7 @@ const APP_SHELL = [
   "./continuous-storage.js",
   "./cloud-sync.js",
   "./continuous.js",
+  "./study.js",
   "./script.js",
   "./data/continuous-core.js",
   "./data/violao.js",

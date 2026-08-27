@@ -7,6 +7,14 @@
   const APP_VERSION = 3;
   const DAY_MS = 86_400_000;
   const DEFAULT_INTERVALS = [1, 7, 21, 45];
+  const DEFAULT_STUDY_SETTINGS = Object.freeze({
+    primaryTargetMinutes: 60,
+    breakMinutes: 15,
+    secondaryTargetMinutes: 30,
+    updatedAt: null,
+  });
+  const STUDY_RECORD_LIMIT = 3000;
+  const MAX_STUDY_SECONDS = 7 * 24 * 60 * 60;
   const INITIAL_REVIEW_OFFSETS = [1, 2, 3, 5, 7, 9, 11];
   const REQUIRED_MASTERED_MATH = new Set([
     "operacoes", "fracoes", "numeros-decimais", "porcentagem", "razao",
@@ -58,6 +66,15 @@
     };
   }
 
+  function createDefaultStudyState() {
+    return {
+      version: 1,
+      settings: { ...DEFAULT_STUDY_SETTINGS },
+      sessions: [],
+      breaks: [],
+    };
+  }
+
   function createDefaultState() {
     let masteredIndex = 0;
     const topics = {};
@@ -72,6 +89,7 @@
       literatureWorks: [],
       examQuestions: [],
       weeklyReviews: {},
+      study: createDefaultStudyState(),
       settings: {
         reviewsEnabled: true,
         reviewIntervals: [...DEFAULT_INTERVALS],
@@ -178,6 +196,7 @@
       literatureWorks: Array.isArray(candidate.literatureWorks) ? candidate.literatureWorks.filter((work) => work?.title).slice(0, 100) : [],
       examQuestions: Array.isArray(candidate.examQuestions) ? candidate.examQuestions.filter((question) => question?.institution).slice(0, 500) : [],
       weeklyReviews: candidate.weeklyReviews && typeof candidate.weeklyReviews === "object" ? candidate.weeklyReviews : {},
+      study: normalizeStudyState(candidate.study),
       settings: {
         reviewsEnabled: candidate.settings?.reviewsEnabled !== false,
         reviewIntervals: normalizeIntervals(candidate.settings?.reviewIntervals),
@@ -238,6 +257,121 @@
     };
   }
 
+  function normalizeStudyState(source) {
+    const settings = normalizeStudySettings(source?.settings);
+    return {
+      version: 1,
+      settings,
+      sessions: normalizeStudySessions(source?.sessions, settings),
+      breaks: normalizeStudyBreaks(source?.breaks, settings),
+    };
+  }
+
+  function normalizeStudySettings(source) {
+    return {
+      primaryTargetMinutes: clampStudyNumber(source?.primaryTargetMinutes, 1, 600, DEFAULT_STUDY_SETTINGS.primaryTargetMinutes),
+      breakMinutes: clampStudyNumber(source?.breakMinutes, 1, 180, DEFAULT_STUDY_SETTINGS.breakMinutes),
+      secondaryTargetMinutes: clampStudyNumber(source?.secondaryTargetMinutes, 1, 600, DEFAULT_STUDY_SETTINGS.secondaryTargetMinutes),
+      updatedAt: validDate(source?.updatedAt),
+    };
+  }
+
+  function normalizeStudySessions(items, settings) {
+    if (!Array.isArray(items)) return [];
+    const sessions = items
+      .filter((item) => item && typeof item === "object")
+      .map((item) => normalizeStudySession(item, settings))
+      .filter(Boolean);
+    return mergeItems(sessions, [], "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT);
+  }
+
+  function normalizeStudySession(source, settings) {
+    const startedAt = validDate(source.startedAt);
+    const endedAt = validDate(source.endedAt);
+    const createdAt = validDate(source.createdAt) || startedAt || endedAt;
+    if (!createdAt) return null;
+    const id = normalizeIdentifier(source.id) || createId();
+    const slot = Number(source.slot) === 2 ? 2 : 1;
+    const targetFallback = slot === 2 ? settings.secondaryTargetMinutes : settings.primaryTargetMinutes;
+    const effectiveSeconds = clampStudyNumber(source.effectiveSeconds, 0, MAX_STUDY_SECONDS, 0);
+    const targetMinutes = clampStudyNumber(source.targetMinutes, 1, 600, targetFallback);
+    return {
+      id,
+      routineId: normalizeIdentifier(source.routineId) || id,
+      dayKey: normalizeDayKey(source.dayKey),
+      slot,
+      subjectId: normalizeText(source.subjectId, 100),
+      subjectName: normalizeText(source.subjectName, 140),
+      startedAt,
+      endedAt,
+      effectiveSeconds,
+      targetMinutes,
+      targetMet: effectiveSeconds >= targetMinutes * 60,
+      status: source.status === "completed" ? "completed" : "incomplete",
+      createdAt,
+      updatedAt: validDate(source.updatedAt) || endedAt || createdAt,
+    };
+  }
+
+  function normalizeStudyBreaks(items, settings) {
+    if (!Array.isArray(items)) return [];
+    const breaks = items
+      .filter((item) => item && typeof item === "object")
+      .map((item) => normalizeStudyBreak(item, settings))
+      .filter(Boolean);
+    return mergeItems(breaks, [], "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT);
+  }
+
+  function normalizeStudyBreak(source, settings) {
+    const startedAt = validDate(source.startedAt);
+    const endedAt = validDate(source.endedAt);
+    const createdAt = validDate(source.createdAt) || startedAt || endedAt;
+    if (!createdAt) return null;
+    const id = normalizeIdentifier(source.id) || createId();
+    return {
+      id,
+      routineId: normalizeIdentifier(source.routineId) || id,
+      dayKey: normalizeDayKey(source.dayKey),
+      plannedSeconds: clampStudyNumber(source.plannedSeconds, 0, 24 * 60 * 60, settings.breakMinutes * 60),
+      actualSeconds: clampStudyNumber(source.actualSeconds, 0, MAX_STUDY_SECONDS, 0),
+      startedAt,
+      endedAt,
+      skipped: source.skipped === true,
+      extensionsMinutes: clampStudyNumber(source.extensionsMinutes, 0, 24 * 60, 0),
+      createdAt,
+      updatedAt: validDate(source.updatedAt) || endedAt || createdAt,
+    };
+  }
+
+  function normalizeIdentifier(value) {
+    return typeof value === "string" ? value.trim().slice(0, 160) : "";
+  }
+
+  function normalizeText(value, limit) {
+    return typeof value === "string" ? value.trim().slice(0, limit) : "";
+  }
+
+  function normalizeDayKey(value) {
+    if (typeof value !== "string") return "";
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!match) return "";
+    const [, year, month, day] = match.map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+      ? value.trim()
+      : "";
+  }
+
+  function validDate(value) {
+    if (typeof value !== "string") return null;
+    return Number.isNaN(new Date(value).getTime()) ? null : value;
+  }
+
+  function clampStudyNumber(value, minimum, maximum, fallback) {
+    if (value === null || value === "" || typeof value === "boolean") return fallback;
+    return clampNumber(value, minimum, maximum, fallback);
+  }
+
   function normalizeIntervals(intervals) {
     if (!Array.isArray(intervals) || intervals.length !== 4) return [...DEFAULT_INTERVALS];
     return intervals.map((value, index) => clampNumber(value, 1, 365, DEFAULT_INTERVALS[index]));
@@ -272,8 +406,30 @@
     merged.literatureWorks = mergeItems(local.literatureWorks, remote.literatureWorks, "updatedAt", "createdAt").slice(0, 100);
     merged.examQuestions = mergeItems(local.examQuestions, remote.examQuestions, "updatedAt", "createdAt").slice(0, 500);
     merged.weeklyReviews = { ...remote.weeklyReviews, ...local.weeklyReviews };
+    merged.study = {
+      version: 1,
+      settings: mergeStudySettings(local.study.settings, remote.study.settings),
+      sessions: mergeItems(local.study.sessions, remote.study.sessions, "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT),
+      breaks: mergeItems(local.study.breaks, remote.study.breaks, "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT),
+    };
     merged.settings = { ...remote.settings, ...local.settings };
     return normalizeState(merged);
+  }
+
+  function mergeStudySettings(localSettings, remoteSettings) {
+    const localTime = new Date(localSettings.updatedAt || 0).getTime();
+    const remoteTime = new Date(remoteSettings.updatedAt || 0).getTime();
+    if (localTime > remoteTime) return { ...localSettings };
+    if (remoteTime > localTime) return { ...remoteSettings };
+
+    const merged = { updatedAt: localSettings.updatedAt || remoteSettings.updatedAt || null };
+    ["primaryTargetMinutes", "breakMinutes", "secondaryTargetMinutes"].forEach((field) => {
+      const fallback = DEFAULT_STUDY_SETTINGS[field];
+      const localIsCustom = localSettings[field] !== fallback;
+      const remoteIsCustom = remoteSettings[field] !== fallback;
+      merged[field] = localIsCustom || !remoteIsCustom ? localSettings[field] : remoteSettings[field];
+    });
+    return merged;
   }
 
   function mergeItems(first = [], second = [], ...dateFields) {
@@ -299,6 +455,7 @@
     STORAGE_KEY,
     DAY_MS,
     DEFAULT_INTERVALS,
+    DEFAULT_STUDY_SETTINGS,
     allTopics,
     createId,
     createDefaultState,

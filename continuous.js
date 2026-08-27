@@ -4,11 +4,11 @@
   const DATA = window.TRAJETORIA_CONTINUOUS;
   const Storage = window.TrajetoriaContinuousStorage;
   const STATUS = {
-    blocked: { label: "Futuro", icon: "🔒" }, available: { label: "Disponível", icon: "○" },
-    learning: { label: "Aprendendo", icon: "◐" }, practicing: { label: "Praticando", icon: "◐" },
-    consolidated: { label: "Consolidado", icon: "✓" }, review: { label: "Revisar", icon: "↻" },
+    future: { label: "Futuro", icon: "○" },
+    current: { label: "Atual", icon: "◐" },
+    consolidated: { label: "Consolidado", icon: "✓" },
   };
-  const RESULTS = { achieved: "Consegui", partial: "Parcial", stuck: "Travei" };
+  const RESULTS = { achieved: "Consegui", partial: "Parcial", stuck: "Travei", practiced: "Pratiquei" };
   const REPERTOIRE_STATUS = { learning: "Aprendendo", problem: "Trecho problemático", playable: "Tocável", consolidated: "Consolidada", maintenance: "Em manutenção" };
   const GAME_CATEGORIES = {
     "hanging-piece": "Peça pendurada", "missed-tactic": "Tática não vista", calculation: "Erro de cálculo",
@@ -36,7 +36,6 @@
     document.getElementById("close-continuous-dialog")?.addEventListener("click", closeDialog);
     dialog?.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
     dialog?.addEventListener("click", handleDialogClick);
-    dialog?.addEventListener("submit", handleDialogSubmit);
     document.addEventListener("submit", handlePageSubmit);
     document.addEventListener("change", handlePageChange);
   }
@@ -45,6 +44,7 @@
     return `
       <section class="continuous-home-section" aria-labelledby="continuous-home-title">
         <div class="section-heading continuous-heading"><div><p class="eyebrow">Formação contínua</p><h2 id="continuous-home-title">Continuar aprendendo</h2><p>Trilhas permanentes, sem porcentagem de conclusão total.</p></div><button class="text-button" type="button" data-action="navigate" data-view-target="continuous">Ver todas as trilhas</button></div>
+        ${renderWeeklyPracticeSummary("continuous-weekly-home")}
         <div class="continuous-now-grid">${DATA.trails.map(renderNowCard).join("")}</div>
       </section>`;
   }
@@ -59,14 +59,32 @@
         <p class="now-label">Agora</p><strong>${escapeHTML(skill.objective)}</strong>
         ${lastDifficulty ? `<p class="last-difficulty"><span>Última dificuldade</span>${escapeHTML(lastDifficulty)}</p>` : ""}
         <p class="next-step"><span>Próximo passo</span>${escapeHTML(skill.applications[0])}</p>
-        <button class="primary-button continuous-button" type="button" data-action="navigate-trail" data-trail-id="${trail.id}">Continuar →</button>
+        <div class="continuous-card-actions">
+          <button class="primary-button continuous-button" type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${skill.id}">Estudar</button>
+          ${renderPracticeButton(trail.id, skill.id, "secondary-button continuous-checkin-button")}
+        </div>
+        <button class="text-button continuous-open-trail" type="button" data-action="navigate-trail" data-trail-id="${trail.id}">Ver trilha →</button>
       </article>`;
+  }
+
+  function renderWeeklyPracticeSummary(titleId) {
+    const week = getCurrentWeek();
+    const trailDays = DATA.trails.map((trail) => ({ trail, days: getTrailPracticeDays(trail.id, week) }));
+    const allDays = new Set(trailDays.flatMap(({ days }) => [...days]));
+    return `
+      <section class="continuous-weekly-summary" aria-labelledby="${titleId}">
+        <div class="continuous-weekly-heading"><div><p class="eyebrow">Prática livre</p><strong id="${titleId}">Esta semana</strong><p>Sem meta obrigatória: apenas uma visão do que ganhou espaço nos seus dias.</p></div><span class="continuous-weekly-total">${formatDayCount(allDays.size)} com alguma prática</span></div>
+        <div class="continuous-weekly-grid">${trailDays.map(({ trail, days }) => `
+          <article class="continuous-weekly-item" style="--trail-accent:${trail.accent}"><span class="continuous-weekly-icon" aria-hidden="true">${trail.icon}</span><span><strong>${escapeHTML(trail.name)}</strong><small>${formatDayCount(days.size)} de prática</small></span></article>
+        `).join("")}</div>
+      </section>`;
   }
 
   function renderContinuousHome(mainContent) {
     const due = getDueSkills();
     mainContent.innerHTML = `
       <section class="page-intro formation-intro"><div><p class="eyebrow">${escapeHTML(DATA.config.pageTitle)}</p><h1>Formação contínua</h1><p class="intro-copy">Caminhos de longo prazo para saber onde você está, o que praticar agora e qual evidência permite avançar.</p></div><div class="priority-reminder"><span>Prioridade atual</span><strong>${escapeHTML(DATA.config.priority.label)}</strong><button type="button" data-action="navigate" data-view-target="home">Abrir preparação</button></div></section>
+      ${renderWeeklyPracticeSummary("continuous-weekly-overview")}
       <section class="continuous-dashboard" aria-labelledby="continue-learning"><div class="section-heading"><div><p class="eyebrow">Agora</p><h2 id="continue-learning">Continuar aprendendo</h2></div></div><div class="continuous-now-grid expanded">${DATA.trails.map(renderNowCard).join("")}</div></section>
       <section class="review-queue" aria-labelledby="continuous-review-title"><div class="section-heading"><div><p class="eyebrow">Revisão simples e transparente</p><h2 id="continuous-review-title">Vale revisar</h2></div><span>${due.length} ${due.length === 1 ? "item" : "itens"}</span></div>${due.length ? `<div class="continuous-review-list">${due.map(({ trail, skill }) => `<button type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${skill.id}"><span>${trail.icon}</span><span><small>${escapeHTML(trail.name)} · ${escapeHTML(skill.stage)}</small><strong>${escapeHTML(skill.title)}</strong></span><b>Revisar →</b></button>`).join("")}</div>` : `<p class="continuous-empty">Nada venceu hoje. Uma habilidade consolidada aparecerá aqui no intervalo programado.</p>`}</section>
     `;
@@ -84,12 +102,11 @@
         <div><p class="eyebrow">Formação contínua · ${escapeHTML(current.stage)}</p><h1><span aria-hidden="true">${trail.icon}</span> ${escapeHTML(trail.name)}</h1><p class="intro-copy">${escapeHTML(trail.description)}</p></div>
         <div class="trail-current-summary"><span>Habilidade atual</span><strong>${escapeHTML(current.title)}</strong><small>${escapeHTML(current.objective)}</small></div>
       </section>
-      <section class="trail-continue" style="--trail-accent:${trail.accent}"><div><p class="eyebrow">Continue de onde parou</p><h2>${escapeHTML(current.title)}</h2><p>${escapeHTML(getLastDifficulty(currentState) || current.applications[0])}</p></div><button class="primary-button continuous-hero-button" type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${current.id}">Continuar</button></section>
-      <section class="session-duration" aria-labelledby="duration-title"><div><p class="eyebrow">Sessão flexível</p><h2 id="duration-title">Tenho agora</h2><p>Os tempos são referências; não há cronômetro obrigatório.</p></div><div>${DATA.config.sessionDurations.map((minutes) => `<button class="secondary-button" type="button" data-continuous-action="start-session" data-trail-id="${trail.id}" data-skill-id="${current.id}" data-minutes="${minutes}">${minutes} min</button>`).join("")}<button class="secondary-button" type="button" data-continuous-action="start-session" data-trail-id="${trail.id}" data-skill-id="${current.id}" data-minutes="free">Continuar livremente</button></div></section>
+      <section class="trail-continue" style="--trail-accent:${trail.accent}"><div><p class="eyebrow">Continue de onde parou</p><h2>${escapeHTML(current.title)}</h2><p>${escapeHTML(getLastDifficulty(currentState) || current.applications[0])}</p></div><div class="trail-continue-actions"><button class="primary-button continuous-hero-button" type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${current.id}">Estudar</button>${renderPracticeButton(trail.id, current.id, "secondary-button continuous-checkin-button")}</div></section>
       ${renderEnglishCompetencies(trail)}
       ${renderRecurringChessFocus(trail)}
       ${due.length ? `<section class="trail-due"><p class="eyebrow">Vale revisar nesta trilha</p>${due.map((skill) => `<button type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${skill.id}">↻ ${escapeHTML(skill.title)} <span>Revisar →</span></button>`).join("")}</section>` : ""}
-      <section class="trail-path-section"><div class="section-heading"><div><p class="eyebrow">Caminho</p><h2>${trail.timeline ? "Linha do tempo navegável" : "Seu caminho de formação"}</h2><p>✓ consolidado · ◐ atual · ○ disponível · 🔒 futuro</p></div></div>${trail.transversalAxes ? `<div class="transversal-axes" aria-label="Eixos transversais">${trail.transversalAxes.map((axis) => `<span>${escapeHTML(axis)}</span>`).join("")}</div>` : ""}<div class="trail-path ${trail.timeline ? "art-timeline" : ""}">${trail.stages.map((stage) => renderStage(trail, stage, current.id)).join("")}</div></section>
+      <section class="trail-path-section"><div class="section-heading"><div><p class="eyebrow">Caminho</p><h2>${trail.timeline ? "Linha do tempo navegável" : "Seu caminho de formação"}</h2><p>✓ consolidado · ◐ atual · ○ futuro</p></div></div>${trail.transversalAxes ? `<div class="transversal-axes" aria-label="Eixos transversais">${trail.transversalAxes.map((axis) => `<span>${escapeHTML(axis)}</span>`).join("")}</div>` : ""}<div class="trail-path ${trail.timeline ? "art-timeline" : ""}">${trail.stages.map((stage) => renderStage(trail, stage, current.id)).join("")}</div></section>
       ${trail.repertoire ? renderRepertoire(trail) : ""}
       ${trail.gameLog ? renderChessLog(trail) : ""}
       ${renderPracticeHistory(trail)}
@@ -102,9 +119,10 @@
 
   function renderPathSkill(trail, skill, currentId) {
     const skillState = getSkillState(trail.id, skill.id);
-    const displayStatus = Storage.due(skillState) ? "review" : skillState.status;
+    const displayStatus = skillState.status === "consolidated" ? "consolidated" : skill.id === currentId ? "current" : "future";
     const status = STATUS[displayStatus];
-    return `<li class="path-skill ${displayStatus} ${skill.id === currentId ? "current" : ""}"><button type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${skill.id}" ${skillState.status === "blocked" ? "disabled" : ""}><span class="path-marker" aria-hidden="true">${skill.id === currentId && displayStatus !== "consolidated" ? "◐" : status.icon}</span><span><strong>${escapeHTML(skill.title)}</strong><small>${escapeHTML(skill.objective)}</small></span><b>${skill.id === currentId ? "Atual" : status.label}</b></button></li>`;
+    const blockedClass = skillState.status === "blocked" ? " blocked" : "";
+    return `<li class="path-skill ${displayStatus}${blockedClass}" data-skill-status="${skillState.status}"><button type="button" data-continuous-action="open-skill" data-trail-id="${trail.id}" data-skill-id="${skill.id}" ${skillState.status === "blocked" ? "disabled" : ""}><span class="path-marker" aria-hidden="true">${status.icon}</span><span><strong>${escapeHTML(skill.title)}</strong><small>${escapeHTML(skill.objective)}</small></span><b>${status.label}</b></button></li>`;
   }
 
   function renderEnglishCompetencies(trail) {
@@ -140,7 +158,7 @@
 
   function renderPracticeHistory(trail) {
     const entries = trail.skills.flatMap((skill) => getSkillState(trail.id, skill.id).practiceLog.map((entry) => ({ ...entry, skill }))).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12);
-    return `<details class="practice-history"><summary>Histórico de prática <span>${entries.length ? `${entries.length} recente${entries.length === 1 ? "" : "s"}` : "vazio"}</span></summary>${entries.length ? `<div>${entries.map((entry) => `<article><span class="result-${entry.result}">${escapeHTML(RESULTS[entry.result])}</span><p><strong>${escapeHTML(entry.skill.title)}</strong>${entry.note ? `<small>${escapeHTML(entry.note)}</small>` : ""}</p><time>${formatDate(entry.date)}</time></article>`).join("")}</div>` : `<p class="continuous-empty">As práticas concluídas aparecerão aqui.</p>`}</details>`;
+    return `<details class="practice-history"><summary>Histórico de prática <span>${entries.length ? `${entries.length} recente${entries.length === 1 ? "" : "s"}` : "vazio"}</span></summary>${entries.length ? `<div>${entries.map((entry) => `<article><span class="result-${entry.result}">${escapeHTML(RESULTS[entry.result] || "Prática")}</span><p><strong>${escapeHTML(entry.skill.title)}</strong>${entry.note ? `<small>${escapeHTML(entry.note)}</small>` : ""}</p><time>${formatDate(entry.date)}</time></article>`).join("")}</div>` : `<p class="continuous-empty">As práticas concluídas aparecerão aqui.</p>`}</details>`;
   }
 
   function openSkill(trailId, skillId) {
@@ -149,97 +167,114 @@
     if (!trail || !skill) return;
     const skillState = getSkillState(trail.id, skill.id);
     if (skillState.status === "blocked") return;
-    activeSession = { trailId, skillId, minutes: null };
+    activeSession = { trailId, skillId };
     dialogEyebrow.textContent = `${trail.icon} ${trail.name} · ${skill.stage}`;
     dialogTitle.textContent = skill.title;
     const connections = getConnections(skill);
-    dialogBody.innerHTML = `<section class="skill-overview"><div><span>Objetivo</span><p>${escapeHTML(skill.objective)}</p></div><div><span>Por que importa</span><p>${escapeHTML(skill.why)}</p></div></section><section class="mastery-evidence"><p class="eyebrow">Critério de domínio</p>${skill.mastery.map((criterion) => `<p>✓ ${escapeHTML(criterion)}</p>`).join("")}</section>${connections.length ? `<section class="skill-connections"><p class="eyebrow">Conexões</p>${connections.map(({ trail: targetTrail, skill: targetSkill }) => `<button type="button" data-continuous-action="jump-connection" data-trail-id="${targetTrail.id}" data-skill-id="${targetSkill.id}">${targetTrail.icon} ${escapeHTML(targetTrail.name)} · ${escapeHTML(targetSkill.title)} →</button>`).join("")}</section>` : ""}<section class="dialog-duration"><p class="eyebrow">Tenho agora</p><div>${DATA.config.sessionDurations.map((minutes) => `<button class="secondary-button" type="button" data-continuous-action="choose-duration" data-minutes="${minutes}">${minutes} min</button>`).join("")}<button class="secondary-button" type="button" data-continuous-action="choose-duration" data-minutes="free">Continuar livremente</button></div></section>${skillState.status !== "consolidated" ? `<button class="text-button mastery-button" type="button" data-continuous-action="consolidate-skill">O critério já está funcional — consolidar</button>` : `<p class="consolidated-note">✓ Habilidade consolidada. Ela continuará voltando para revisão.</p>`}`;
+    const practicedToday = hasPracticedToday(trail.id);
+    dialogBody.innerHTML = `
+      <section class="skill-overview"><div><span>Objetivo</span><p>${escapeHTML(skill.objective)}</p></div><div><span>Por que importa</span><p>${escapeHTML(skill.why)}</p></div></section>
+      <section class="skill-study-guide"><div class="skill-practices"><p class="eyebrow">Como estudar</p><ul>${skill.practices.map((practice) => `<li>${escapeHTML(practice)}</li>`).join("")}</ul></div><div class="skill-applications"><p class="eyebrow">Aplicar</p><ul>${skill.applications.map((application) => `<li>${escapeHTML(application)}</li>`).join("")}</ul></div></section>
+      <section class="mastery-evidence"><p class="eyebrow">Critério de domínio</p>${skill.mastery.map((criterion) => `<p>✓ ${escapeHTML(criterion)}</p>`).join("")}</section>
+      ${connections.length ? `<section class="skill-connections"><p class="eyebrow">Conexões</p>${connections.map(({ trail: targetTrail, skill: targetSkill }) => `<button type="button" data-continuous-action="jump-connection" data-trail-id="${targetTrail.id}" data-skill-id="${targetSkill.id}">${targetTrail.icon} ${escapeHTML(targetTrail.name)} · ${escapeHTML(targetSkill.title)} →</button>`).join("")}</section>` : ""}
+      <section class="continuous-practice-checkin">
+        <div class="continuous-practice-checkin-copy"><p class="eyebrow">Registro leve</p><h3 data-continuous-practice-status="${trail.id}">${practicedToday ? "Prática de hoje registrada" : "Praticou hoje?"}</h3><p>Um toque basta. Não há tempo mínimo nem meta obrigatória.</p></div>
+        ${practicedToday ? "" : `<details class="continuous-observation"><summary>Adicionar observação <span>opcional</span></summary><label>Observação<textarea name="practice-note" rows="3" maxlength="600" placeholder="Algo que queira lembrar desta prática"></textarea></label></details>`}
+        <div class="continuous-skill-actions">${renderPracticeButton(trail.id, skill.id, "primary-button continuous-dialog-checkin")}${skillState.status !== "consolidated" ? `<button class="secondary-button continuous-consolidate-button" type="button" data-continuous-action="consolidate-skill">Consolidar</button>` : ""}</div>
+      </section>
+      ${skillState.status === "consolidated" ? `<p class="consolidated-note">✓ Habilidade consolidada. O conteúdo permanece disponível para consulta.</p>` : ""}`;
     showDialog();
   }
 
-  function startSession(trailId, skillId, minutes) {
+  function renderPracticeButton(trailId, skillId, className) {
+    const practicedToday = hasPracticedToday(trailId);
+    return `<button class="${className}" type="button" data-continuous-action="practice-today" data-trail-id="${trailId}" data-skill-id="${skillId}" aria-pressed="${practicedToday}" ${practicedToday ? "disabled" : ""}>${practicedToday ? "✓ Praticado hoje" : "Pratiquei hoje"}</button>`;
+  }
+
+  function ensurePracticeToday(trail, skill, note = "") {
+    const skillState = getSkillState(trail.id, skill.id);
+    if (!skillState || skillState.status === "blocked") return false;
+    const now = new Date();
+    const dayKey = localDayKey(now);
+    if (hasPracticedOnDay(trail.id, dayKey)) return false;
+    const timestamp = now.toISOString();
+    const entryId = `hobby-checkin:${trail.id}:${dayKey}`;
+    const entry = {
+      id: entryId, date: timestamp, dayKey, result: "practiced", note: String(note || "").slice(0, 600),
+      trailId: trail.id, skillId: skill.id,
+    };
+    skillState.practiceLog = skillState.practiceLog.filter((item) => item.id !== entryId);
+    skillState.practiceLog.push({ ...entry });
+    skillState.practiceLog = skillState.practiceLog.slice(-100);
+    skillState.lastPractice = timestamp;
+    skillState.updatedAt = timestamp;
+    if (skillState.status === "available") skillState.status = "learning";
+    const trailState = state.trails[trail.id];
+    if (!['blocked', 'consolidated'].includes(skillState.status)) {
+      trailState.currentSkillId = skill.id;
+      trailState.currentSkillUpdatedAt = timestamp;
+    }
+    trailState.updatedAt = timestamp;
+    state.activity = state.activity.filter((item) => item.id !== entryId);
+    state.activity.push({ ...entry });
+    state.activity = state.activity.slice(-300);
+    return true;
+  }
+
+  function recordPracticeToday(trailId, skillId, note = "") {
     const trail = findTrail(trailId);
     const skill = findSkill(trail, skillId);
     if (!trail || !skill) return;
-    const trailState = state.trails[trail.id];
-    const skillState = trailState.skills[skill.id];
-    const now = new Date().toISOString();
-    if (skillState.status === "available") skillState.status = "learning";
-    trailState.currentSkillId = skill.id;
-    trailState.currentSkillUpdatedAt = now;
-    trailState.updatedAt = now;
-    skillState.updatedAt = now;
-    persist();
-    activeSession = { trailId, skillId, minutes };
-    const due = trail.skills.find((candidate) => candidate.id !== skill.id && Storage.due(getSkillState(trail.id, candidate.id)));
-    const steps = buildSessionSteps(skill, due, minutes);
-    dialogEyebrow.textContent = `${trail.icon} ${trail.name} · ${minutes === "free" ? "sessão livre" : `${minutes} min`}`;
-    dialogTitle.textContent = skill.title;
-    dialogBody.innerHTML = `<section class="session-plan"><p class="eyebrow">Prática sugerida</p><ol>${steps.map((step) => `<li>${escapeHTML(step)}</li>`).join("")}</ol>${due ? `<p class="review-in-session">↻ Revisão incluída: ${escapeHTML(due.title)}</p>` : ""}</section><section class="session-finish"><p class="eyebrow">Ao terminar</p><h3>Como foi?</h3><form id="continuous-result-form"><div class="result-buttons"><button type="submit" name="result" value="achieved">Consegui</button><button type="submit" name="result" value="partial">Parcial</button><button type="submit" name="result" value="stuck">Travei</button></div><label>O que aconteceu? <span>opcional</span><textarea name="note" rows="3" maxlength="600" placeholder="Ex.: o ritmo quebrava na troca C → G"></textarea></label></form></section>`;
-    showDialog();
-  }
-
-  function buildSessionSteps(skill, due, minutes) {
-    const short = minutes === 10;
-    const steps = ["Tente realizar a habilidade uma vez sem consultar instruções."];
-    if (due && !short) steps.push(`Recupere brevemente: ${due.title}. Confira somente depois da tentativa.`);
-    steps.push(skill.practices[0]);
-    if (!short && skill.practices[1]) steps.push(skill.practices[1]);
-    steps.push(skill.applications[0]);
-    if (minutes === 40 || minutes === "free") steps.push("Repita o todo em uma situação ligeiramente diferente e compare o resultado.");
-    return steps;
-  }
-
-  function recordResult(result, note) {
-    if (!activeSession || !Storage.VALID_RESULTS.includes(result)) return;
-    const trail = findTrail(activeSession.trailId);
-    const skill = findSkill(trail, activeSession.skillId);
-    const skillState = getSkillState(trail.id, skill.id);
-    const now = new Date().toISOString();
-    skillState.practiceLog.push({ id: Storage.id(), date: now, result, note: note.slice(0, 600) });
-    skillState.practiceLog = skillState.practiceLog.slice(-100);
-    skillState.lastPractice = now;
-    skillState.updatedAt = now;
-    state.trails[trail.id].updatedAt = now;
-    if (note) skillState.notes = note.slice(0, 1200);
-    if (result === "stuck") {
-      skillState.status = "learning";
-      skillState.review.step = 0;
-      skillState.review.nextAt = Storage.addDays(1);
-    } else if (result === "partial") {
-      if (skillState.status !== "consolidated") skillState.status = "practicing";
-      skillState.review.nextAt = Storage.addDays(3);
-    } else {
-      if (skillState.status !== "consolidated") skillState.status = "practicing";
-      skillState.review.step += 1;
-      skillState.review.nextAt = Storage.addDays(DATA.config.reviewIntervals[Math.min(skillState.review.step, DATA.config.reviewIntervals.length - 1)]);
+    if (!ensurePracticeToday(trail, skill, note)) {
+      toast("A prática de hoje já está registrada.");
+      updatePracticeButtons(trail.id);
+      return;
     }
-    state.activity.push({ id: Storage.id(), trailId: trail.id, skillId: skill.id, result, note: note.slice(0, 600), date: now });
-    state.activity = state.activity.slice(-300);
     persist();
-    closeDialog();
     host.renderCurrentView?.();
-    toast(`Prática registrada: ${RESULTS[result].toLowerCase()}.`);
+    updatePracticeButtons(trail.id);
+    toast(`${trail.name}: prática de hoje registrada.`);
+  }
+
+  function updatePracticeButtons(trailId) {
+    document.querySelectorAll('[data-continuous-action="practice-today"]').forEach((button) => {
+      if (button.dataset.trailId !== trailId) return;
+      button.disabled = true;
+      button.setAttribute("aria-pressed", "true");
+      button.textContent = "✓ Praticado hoje";
+    });
+    document.querySelectorAll("[data-continuous-practice-status]").forEach((element) => {
+      if (element.dataset.continuousPracticeStatus === trailId) element.textContent = "Prática de hoje registrada";
+    });
+    dialogBody?.querySelector(".continuous-observation")?.setAttribute("hidden", "");
   }
 
   function consolidateActiveSkill() {
     if (!activeSession) return;
     const trail = findTrail(activeSession.trailId);
     const skill = findSkill(trail, activeSession.skillId);
+    if (!trail || !skill) return;
     const skillState = getSkillState(trail.id, skill.id);
+    ensurePracticeToday(trail, skill, getDialogPracticeNote());
     const now = new Date().toISOString();
     skillState.status = "consolidated";
     skillState.consolidatedAt = now;
     skillState.updatedAt = now;
     skillState.review = { step: 0, nextAt: Storage.addDays(DATA.config.reviewIntervals[0]) };
     Storage.reconcileUnlocks(state, trail);
-    state.trails[trail.id].currentSkillId = null;
-    state.trails[trail.id].currentSkillUpdatedAt = now;
-    state.trails[trail.id].updatedAt = now;
+    const nextSkill = getNextEligibleSkill(trail);
+    const trailState = state.trails[trail.id];
+    trailState.currentSkillId = nextSkill?.id || null;
+    trailState.currentSkillUpdatedAt = now;
+    trailState.updatedAt = now;
     persist();
     closeDialog();
     host.renderCurrentView?.();
-    toast(`${skill.title} consolidado. Novos passos podem estar disponíveis.`);
+    toast(nextSkill ? `${skill.title} consolidado. Próximo: ${nextSkill.title}.` : `${skill.title} consolidado.`);
+  }
+
+  function getNextEligibleSkill(trail) {
+    return trail.skills.find((skill) => !["blocked", "consolidated"].includes(getSkillState(trail.id, skill.id).status)) || null;
   }
 
   function getCurrentSkill(trail) {
@@ -259,7 +294,7 @@
   }
 
   function getLastDifficulty(skillState) {
-    const entry = [...skillState.practiceLog].reverse().find((item) => item.note && item.result !== "achieved");
+    const entry = [...skillState.practiceLog].reverse().find((item) => item.note && ["partial", "stuck"].includes(item.result));
     return entry?.note || skillState.notes || "";
   }
 
@@ -272,7 +307,7 @@
     const name = action.dataset.continuousAction;
     if (!name) return false;
     if (name === "open-skill") openSkill(action.dataset.trailId, action.dataset.skillId);
-    else if (name === "start-session") startSession(action.dataset.trailId, action.dataset.skillId, parseMinutes(action.dataset.minutes));
+    else if (name === "practice-today") recordPracticeToday(action.dataset.trailId, action.dataset.skillId);
     else if (name === "delete-repertoire") deleteRepertoire(action.dataset.trailId, action.dataset.itemId);
     return true;
   }
@@ -281,16 +316,9 @@
     const action = event.target.closest("[data-continuous-action]");
     if (!action) return;
     const name = action.dataset.continuousAction;
-    if (name === "choose-duration") startSession(activeSession.trailId, activeSession.skillId, parseMinutes(action.dataset.minutes));
+    if (name === "practice-today") recordPracticeToday(action.dataset.trailId, action.dataset.skillId, getDialogPracticeNote());
     else if (name === "consolidate-skill") consolidateActiveSkill();
     else if (name === "jump-connection") { closeDialog(); host.navigate?.("trail", action.dataset.trailId); setTimeout(() => openSkill(action.dataset.trailId, action.dataset.skillId), 0); }
-  }
-
-  function handleDialogSubmit(event) {
-    if (event.target.id !== "continuous-result-form") return;
-    event.preventDefault();
-    const result = event.submitter?.value;
-    recordResult(result, new FormData(event.target).get("note")?.trim() || "");
   }
 
   function handlePageSubmit(event) {
@@ -341,7 +369,45 @@
   function findTrail(trailId) { return DATA.trails.find((trail) => trail.id === trailId) || null; }
   function findSkill(trail, skillId) { return trail?.skills.find((skill) => skill.id === skillId) || null; }
   function getSkillState(trailId, skillId) { return state.trails[trailId].skills[skillId]; }
-  function parseMinutes(value) { return value === "free" ? "free" : Number(value); }
+  function getDialogPracticeNote() { return dialogBody?.querySelector('[name="practice-note"]')?.value.trim().slice(0, 600) || ""; }
+
+  function getCurrentWeek(reference = new Date()) {
+    const start = new Date(reference);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return { start: localDayKey(start), end: localDayKey(end) };
+  }
+
+  function getTrailPracticeDayKeys(trailId) {
+    const days = new Set();
+    const collect = (entry) => {
+      if (!Storage.VALID_RESULTS.includes(entry?.result)) return;
+      const dayKey = practiceDayKey(entry);
+      if (dayKey) days.add(dayKey);
+    };
+    state.activity.filter((entry) => entry.trailId === trailId).forEach(collect);
+    const trail = findTrail(trailId);
+    trail?.skills.forEach((skill) => getSkillState(trailId, skill.id).practiceLog.forEach(collect));
+    return days;
+  }
+
+  function getTrailPracticeDays(trailId, week = getCurrentWeek()) {
+    return new Set([...getTrailPracticeDayKeys(trailId)].filter((dayKey) => dayKey >= week.start && dayKey <= week.end));
+  }
+
+  function hasPracticedOnDay(trailId, dayKey) { return getTrailPracticeDayKeys(trailId).has(dayKey); }
+  function hasPracticedToday(trailId) { return hasPracticedOnDay(trailId, localDayKey(new Date())); }
+  function practiceDayKey(entry) { return /^\d{4}-\d{2}-\d{2}$/.test(entry?.dayKey || "") ? entry.dayKey : localDayKey(entry?.date); }
+  function localDayKey(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const pad = (part) => String(part).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  function formatDayCount(count) { return `${count} ${count === 1 ? "dia" : "dias"}`; }
   function showDialog() { if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", ""); }
   function closeDialog() { if (!dialog?.open) return; if (typeof dialog.close === "function") dialog.close(); else dialog.removeAttribute("open"); }
   function toast(message) { if (host.showToast) host.showToast(message); }

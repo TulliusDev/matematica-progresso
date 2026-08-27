@@ -6,7 +6,7 @@
   const APP_VERSION = 1;
   const DAY_MS = 86_400_000;
   const VALID_STATUSES = ["blocked", "available", "learning", "practicing", "consolidated", "review"];
-  const VALID_RESULTS = ["achieved", "partial", "stuck"];
+  const VALID_RESULTS = ["achieved", "partial", "stuck", "practiced"];
 
   function id() {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -70,6 +70,7 @@
         deletedRepertoire: normalizeDeletedItems(sourceTrail.deletedRepertoire),
         games: normalizeGames(sourceTrail.games),
       };
+      reconcilePracticeCheckIns(normalized, trail);
       normalized.trails[trail.id].updatedAt ||= latestTrailDate(normalized.trails[trail.id]);
       reconcileUnlocks(normalized, trail);
     });
@@ -131,6 +132,37 @@
       id: String(item.id || id()), category: item.category, result: String(item.result || "").slice(0, 30),
       note: String(item.note || "").slice(0, 600), date: validDate(item.date),
     })).slice(-100);
+  }
+
+  function reconcilePracticeCheckIns(state, trail) {
+    const trailState = state.trails[trail.id];
+    const locations = new Map();
+    trail.skills.forEach((skill) => {
+      trailState.skills[skill.id].practiceLog.forEach((entry) => {
+        if (entry.result !== "practiced") return;
+        if (!locations.has(entry.id)) locations.set(entry.id, new Set());
+        locations.get(entry.id).add(skill.id);
+      });
+    });
+
+    const activityOwners = new Map(state.activity
+      .filter((entry) => entry.result === "practiced" && entry.trailId === trail.id && entry.skillId)
+      .map((entry) => [entry.id, entry.skillId]));
+    const owners = new Map();
+    locations.forEach((skillIds, entryId) => {
+      const activityOwner = activityOwners.get(entryId);
+      owners.set(entryId, skillIds.has(activityOwner) ? activityOwner : skillIds.values().next().value);
+    });
+
+    const retained = new Set();
+    trail.skills.forEach((skill) => {
+      trailState.skills[skill.id].practiceLog = trailState.skills[skill.id].practiceLog.filter((entry) => {
+        if (entry.result !== "practiced") return true;
+        if (owners.get(entry.id) !== skill.id || retained.has(entry.id)) return false;
+        retained.add(entry.id);
+        return true;
+      });
+    });
   }
 
   function mergeStates(localCandidate, remoteCandidate) {

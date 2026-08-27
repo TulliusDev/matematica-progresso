@@ -4,6 +4,7 @@
   const { subjects, schedule } = window.TRAJETORIA_DATA;
   const Storage = window.TrajetoriaStorage;
   const Continuous = window.TrajetoriaContinuous;
+  const Study = window.TrajetoriaStudy;
   const continuousTrails = window.TRAJETORIA_CONTINUOUS.trails;
   const { allTopics, DAY_MS } = Storage;
   const STATUS_WEIGHT = { "not-started": 0, studying: 0.34, consolidating: 0.67, mastered: 1 };
@@ -41,6 +42,15 @@
     populateSubjectSelects();
     bindStaticEvents();
     Continuous.initialize({ navigate, renderCurrentView, showToast, queueCloudSave: queueCloudState });
+    Study.initialize({
+      getState: () => state,
+      persist,
+      renderCurrentView,
+      showToast,
+      getSubjectFocus,
+      navigate,
+      addActivity,
+    });
     navigateFromHash();
     updateNavigationBadges();
     initializeCloudSync();
@@ -66,6 +76,7 @@
       "import-data", "reset-progress", "reset-dialog", "sync-summary", "sync-summary-text",
       "sync-detail", "sync-login", "sync-email", "sync-account", "sync-user-email",
       "sync-now", "sync-sign-out", "pwa-install-section", "pwa-install",
+      "study-primary-minutes", "study-break-minutes", "study-secondary-minutes",
     ];
     ids.forEach((id) => {
       elements[toCamel(id)] = document.getElementById(id);
@@ -165,6 +176,7 @@
       </section>
       <section class="home-priority"><div><p class="eyebrow">Objetivo atual · prioridade acadêmica</p><h2>CEFET / COLTEC</h2><p>O painel de preparação continua sendo o foco principal desta fase.</p></div><span>O que estudar agora?</span></section>
       ${renderDailyRoutine(todaySchedule)}
+      ${Study.renderConsistencySection()}
       ${renderFocusCard(focus, "Foco recomendado agora")}
       <section class="overview home-overview" aria-label="Resumo geral">
         <div class="progress-feature">
@@ -195,17 +207,7 @@
         </section>
       `;
     }
-    const primary = findSubject(todaySchedule.primary.subjectId);
-    const secondary = findSubject(todaySchedule.secondary.subjectId);
-    return `
-      <section class="daily-plan" aria-label="Plano de hoje">
-        <div class="plan-heading"><div><p class="eyebrow">Plano de hoje</p><h2>80 minutos de estudo focado</h2></div><span>+ revisões necessárias</span></div>
-        <div class="routine-grid">
-          ${renderRoutineCard(primary, todaySchedule.primary.minutes, "Matéria principal")}
-          ${renderRoutineCard(secondary, todaySchedule.secondary.minutes, "Matéria secundária")}
-        </div>
-      </section>
-    `;
+    return Study.renderDailyRoutine(todaySchedule);
   }
 
   function renderRoutineCard(subject, minutes, label) {
@@ -783,6 +785,9 @@
     elements.reopenForgotten.checked = state.settings.reopenForgotten;
     elements.staleReviewDays.value = state.settings.staleReviewDays;
     state.settings.reviewIntervals.forEach((interval, index) => { elements[`interval${index + 1}`].value = interval; });
+    elements.studyPrimaryMinutes.value = state.study.settings.primaryTargetMinutes;
+    elements.studyBreakMinutes.value = state.study.settings.breakMinutes;
+    elements.studySecondaryMinutes.value = state.study.settings.secondaryTargetMinutes;
     elements.intervalSettings.disabled = !state.settings.reviewsEnabled;
     openDialog(elements.settingsDialog);
   }
@@ -794,6 +799,12 @@
     state.settings.reopenForgotten = elements.reopenForgotten.checked;
     state.settings.reviewIntervals = intervals;
     state.settings.staleReviewDays = Storage.clampNumber(elements.staleReviewDays.value, 7, 180, 21);
+    state.study.settings = {
+      primaryTargetMinutes: Storage.clampNumber(elements.studyPrimaryMinutes.value, 5, 240, Storage.DEFAULT_STUDY_SETTINGS.primaryTargetMinutes),
+      breakMinutes: Storage.clampNumber(elements.studyBreakMinutes.value, 1, 60, Storage.DEFAULT_STUDY_SETTINGS.breakMinutes),
+      secondaryTargetMinutes: Storage.clampNumber(elements.studySecondaryMinutes.value, 5, 240, Storage.DEFAULT_STUDY_SETTINGS.secondaryTargetMinutes),
+      updatedAt: new Date().toISOString(),
+    };
     persist();
     closeDialog(elements.settingsDialog);
     renderCurrentView();
@@ -821,8 +832,10 @@
       try {
         const parsed = JSON.parse(String(reader.result));
         if (!parsed.data?.topics || !["trajetoria", "trajetoria-matematica"].includes(parsed.app)) throw new Error("Formato inválido");
+        const currentStudy = state.study;
         state = parsed.app === "trajetoria-matematica" ? Storage.migrateV2(parsed.data) : Storage.normalizeState(parsed.data);
-        if (parsed.continuousData) Continuous.importState(parsed.continuousData);
+        if (!Object.prototype.hasOwnProperty.call(parsed.data, "study")) state.study = currentStudy;
+        if (parsed.continuousData) Continuous.importState(parsed.continuousData, { preserveMissingCheckIns: true });
         persist();
         closeDialog(elements.settingsDialog);
         renderCurrentView();
@@ -840,6 +853,7 @@
   function resetAll() {
     state = Storage.createDefaultState();
     Continuous.resetState();
+    Study.resetActiveSession();
     persist();
     closeDialog(elements.resetDialog);
     closeDialog(elements.settingsDialog);
@@ -909,6 +923,7 @@
         state = Storage.normalizeState(nextState);
         Storage.saveState(state);
         if (nextState?.continuousData) Continuous.importState(nextState.continuousData);
+        Study.applyExternalState();
         renderCurrentView();
         if (elements.topicDialog.open) populateTopicDialog();
       },
@@ -1006,6 +1021,8 @@
   }
 
   function handleMainClick(event) {
+    const studyAction = event.target.closest("[data-study-action]");
+    if (studyAction && Study.handleAction(studyAction)) return;
     const continuousAction = event.target.closest("[data-continuous-action]");
     if (continuousAction && Continuous.handleAction(continuousAction)) return;
     const action = event.target.closest("[data-action]");

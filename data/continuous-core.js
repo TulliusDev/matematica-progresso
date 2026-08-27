@@ -49,7 +49,6 @@
       pageTitle: "Minha Formação",
       priority: { id: "cefet-coltec", label: "CEFET / COLTEC", description: "Objetivo acadêmico prioritário atual" },
       continuousLabel: "Formação contínua",
-      sessionDurations: [10, 20, 40],
       reviewIntervals: [3, 7, 14, 30],
     },
     trails,
