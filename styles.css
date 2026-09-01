@@ -4003,6 +4003,93 @@ noscript {
   }
 }
 
+/* Planejamento temporal acadêmico */
+.planning-panel {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, rgba(124, 140, 255, 0.08), var(--surface));
+}
+
+.planning-header,
+.planning-balance,
+.planning-summary-grid,
+.planning-subject-loads > div,
+.planning-variance-list li,
+.topic-effort-section,
+.topic-effort-metrics {
+  display: flex;
+  align-items: center;
+}
+
+.planning-header { justify-content: space-between; gap: 18px; }
+.planning-header h2 { margin: 0; font-size: clamp(1.25rem, 2.4vw, 1.7rem); }
+.planning-status { padding: 6px 10px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.planning-behind .planning-status { background: var(--danger-soft); color: var(--danger); }
+.planning-attention .planning-status { background: var(--amber-soft); color: var(--amber); }
+.planning-balance { align-items: baseline; gap: 12px; margin: 22px 0 16px; }
+.planning-balance > span { color: var(--muted-light); }
+.planning-balance strong { font-size: clamp(2rem, 6vw, 3.2rem); letter-spacing: -.06em; }
+.planning-balance small { color: var(--muted); }
+.planning-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
+.planning-summary-grid > div { min-width: 0; padding: 14px; }
+.planning-summary-grid > div + div { border-left: 1px solid var(--border); }
+.planning-summary-grid span, .planning-summary-grid strong { display: block; }
+.planning-summary-grid span { margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+.planning-summary-grid strong { font-size: 14px; }
+.planning-details { margin-top: 14px; }
+.planning-details > summary { width: fit-content; color: var(--blue); font-weight: 700; cursor: pointer; }
+.planning-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.planning-detail-grid > section { padding: 17px; border: 1px solid var(--border); border-radius: 12px; background: rgba(0,0,0,.08); }
+.planning-detail-grid h3 { margin: 0 0 12px; font-size: 15px; }
+.planning-detail-grid p { color: var(--muted-light); }
+.planning-detail-grid dl { margin: 0; }
+.planning-detail-grid dl div, .planning-subject-loads > div { justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.planning-detail-grid dt, .planning-subject-loads span { color: var(--muted-light); }
+.planning-detail-grid dd { margin: 0; font-weight: 700; }
+.planning-topic-list, .planning-variance-list { display: grid; gap: 7px; padding: 0; margin: 0; list-style: none; }
+.planning-topic-list li { display: flex; justify-content: space-between; gap: 10px; }
+.planning-topic-list small { color: var(--muted); }
+.planning-variance-list li { justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.planning-variance-list span, .planning-variance-list small { display: block; }
+.planning-variance-list small, .planning-empty, .planning-validation-count { color: var(--muted); }
+.planning-variance-list b { color: var(--amber); white-space: nowrap; }
+.planning-gains b { color: var(--green); }
+.planning-list-label { margin: 14px 0 6px !important; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.planning-insights { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+.planning-insights p { margin: 7px 0; font-size: 12px; }
+.topic-effort-section { justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.topic-effort-section h3, .topic-effort-section p { margin: 0; }
+.topic-effort-section label { display: grid; gap: 5px; color: var(--muted-light); font-size: 12px; }
+.topic-effort-metrics { width: 100%; gap: 18px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.topic-effort-metrics strong { margin-left: 4px; color: var(--text); }
+.planning-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.planning-settings-grid label { display: grid; gap: 6px; }
+.planning-weekdays { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 0; padding: 0; border: 0; }
+.planning-weekdays legend { width: 100%; color: var(--muted-light); font-size: 12px; }
+.planning-weekdays label { display: flex; gap: 5px; align-items: center; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; }
+.planning-settings-note { color: var(--muted); font-size: 12px; }
+.study-topic-select { display: grid; gap: 6px; margin-bottom: 18px; text-align: left; }
+.study-topic-select > span { color: var(--muted-light); font-size: 12px; }
+.study-topic-select small { color: var(--muted); font-size: 11px; }
+.study-weekend-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.study-weekend-actions select { min-height: 42px; }
+
+@media (max-width: 760px) {
+  .planning-summary-grid, .planning-detail-grid { grid-template-columns: 1fr 1fr; }
+  .planning-summary-grid > div:nth-child(3) { border-left: 0; border-top: 1px solid var(--border); }
+  .planning-summary-grid > div:nth-child(4) { border-top: 1px solid var(--border); }
+  .planning-balance { align-items: flex-start; flex-direction: column; gap: 2px; }
+}
+
+@media (max-width: 480px) {
+  .planning-header { align-items: flex-start; flex-direction: column; }
+  .planning-summary-grid, .planning-detail-grid, .planning-settings-grid { grid-template-columns: 1fr; }
+  .planning-summary-grid > div + div { border-top: 1px solid var(--border); border-left: 0; }
+  .topic-effort-metrics { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .study-weekend-actions, .study-weekend-actions > * { width: 100%; }
+}
+
 /* Formação contínua — registro leve de prática */
 .continuous-weekly-summary {
   margin-bottom: 24px;

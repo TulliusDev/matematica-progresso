@@ -50,12 +50,16 @@
     const study = getStudyState();
     const settings = getSettings(study);
 
+    if (activeFlow?.extra) {
+      return `<section class="daily-plan study-weekend-plan"><div><p class="eyebrow">Estudo acadêmico extra</p><h2>${escapeHTML(activeFlow.current?.subjectName || activeFlow.primary.subjectName)}</h2><p>Este tempo reduz a carga real, sem transformar o dia em obrigação futura.</p></div><button class="primary-button study-plan-action" type="button" data-study-action="open-active">Abrir cronômetro</button></section>`;
+    }
+
     if (!activeFlow && (!todaySchedule?.primary || !todaySchedule?.secondary)) {
       if (todaySchedule?.type === "weekly-review") {
         return `
           <section class="daily-plan weekend-plan study-weekend-plan">
-            <div><p class="eyebrow">Rotina flexível de fim de semana</p><h2>Revisão semanal leve</h2><p>Use o fim de semana para revisar sem iniciar automaticamente uma rotina de duas matérias.</p></div>
-            <button class="primary-button study-plan-action" type="button" data-study-action="open-review">Abrir revisão →</button>
+            <div><p class="eyebrow">Rotina flexível de fim de semana</p><h2>Revisão ou estudo extra</h2><p>O estudo extra reduz a carga real sem tornar o fim de semana obrigatório.</p></div>
+            <div class="study-weekend-actions"><button class="secondary-button study-plan-action" type="button" data-study-action="open-review">Abrir revisão</button><label><span class="sr-only">Matéria do estudo extra</span><select id="study-extra-subject">${renderSubjectOptions()}</select></label><button class="primary-button study-plan-action" type="button" data-study-action="start-extra">Iniciar estudo extra</button></div>
           </section>
         `;
       }
@@ -128,6 +132,8 @@
       host.navigate?.("review");
     } else if (action === "start-routine" || action === "resume-routine") {
       startRoutineFromAction(element);
+    } else if (action === "start-extra") {
+      startExtraSession();
     } else if (action === "open-active") {
       saveActiveFlow();
       openStudyDialog();
@@ -351,7 +357,7 @@
       .filter((session) => session.dayKey === summary.dayKey)
       .sort((first, second) => first.slot - second.slot || dateTime(first.startedAt) - dateTime(second.startedAt));
     const breaks = study.breaks.filter((entry) => entry.dayKey === summary.dayKey);
-    const studyItems = sessions.map((session) => `<li><span><strong>${escapeHTML(session.subjectName || subjectName(session.subjectId))}</strong><small>Sessão ${session.slot}${session.status === "incomplete" ? " · incompleta" : ""}</small></span><b>${formatStudyDuration(session.effectiveSeconds)}</b></li>`).join("");
+    const studyItems = sessions.map((session) => `<li><span><strong>${escapeHTML(session.subjectName || subjectName(session.subjectId))}</strong><small>${session.topicName ? `${escapeHTML(session.topicName)} · ` : ""}Sessão ${session.slot}${session.status === "incomplete" ? " · incompleta" : ""}</small></span><b>${formatStudyDuration(session.effectiveSeconds)}</b></li>`).join("");
     const breakItems = breaks.map((entry) => `<li><span><strong>Intervalo</strong><small>${entry.skipped ? "Pulado" : "Concluído"}</small></span><b>${entry.skipped ? "—" : formatStudyDuration(entry.actualSeconds)}</b></li>`).join("");
     return `
       <article class="study-history-day">
@@ -419,12 +425,38 @@
     openStudyDialog();
   }
 
+  function startExtraSession() {
+    if (activeFlow) return openStudyDialog();
+    const subjectId = document.getElementById("study-extra-subject")?.value || window.TRAJETORIA_DATA?.subjects?.[0]?.id;
+    if (!subjectId) return toast("Escolha uma matéria para o estudo extra.");
+    const settings = getSettings(getStudyState());
+    const descriptor = subjectDescriptor(subjectId, settings.primaryTargetMinutes);
+    const now = new Date();
+    activeFlow = {
+      version: ACTIVE_VERSION,
+      extra: true,
+      routineId: `study-extra-${localDayKey(now)}-${now.getTime().toString(36)}`,
+      dayKey: localDayKey(now),
+      phase: "primary",
+      primary: descriptor,
+      secondary: descriptor,
+      current: null,
+      breakState: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    activeFlow.current = createCurrentSession(1, descriptor);
+    saveActiveFlow(); dialogMode = "timer"; syncTick(); host.renderCurrentView?.(); openStudyDialog();
+  }
+
   function createCurrentSession(slot, descriptor, previousRecord = null) {
     const now = new Date().toISOString();
     return {
       slot,
       subjectId: descriptor.subjectId,
       subjectName: descriptor.subjectName,
+      topicId: previousRecord?.topicId || descriptor.topicId || "",
+      topicName: previousRecord?.topicName || descriptor.topicName || "",
       targetMinutes: descriptor.targetMinutes,
       startedAt: previousRecord?.startedAt || now,
       accumulatedMs: Math.max(0, Number(previousRecord?.effectiveSeconds || 0) * 1000),
@@ -467,6 +499,8 @@
       slot: current.slot,
       subjectId: current.subjectId,
       subjectName: current.subjectName,
+      topicId: current.topicId,
+      topicName: current.topicName,
       startedAt: current.startedAt,
       endedAt: now,
       effectiveSeconds,
@@ -481,6 +515,14 @@
       addActivity("study-session", `Sessão ${current.slot} de ${current.subjectName}: ${formatStudyDuration(effectiveSeconds)}`);
     }
     if (!persistMainState()) return;
+
+    if (activeFlow.extra) {
+      clearActiveFlow();
+      closeStudyDialog();
+      host.renderCurrentView?.();
+      toast("Estudo extra salvo. A carga restante foi recalculada.");
+      return;
+    }
 
     if (current.slot === 1) {
       activeFlow.current = null;
@@ -641,6 +683,8 @@
       slot: current.slot,
       subjectId: current.subjectId,
       subjectName: current.subjectName,
+      topicId: current.topicId,
+      topicName: current.topicName,
       startedAt: current.startedAt,
       endedAt: now,
       effectiveSeconds,
@@ -678,6 +722,7 @@
       title.textContent = current.subjectName;
       body.innerHTML = `
         <section class="study-dialog-timer">
+          ${renderTopicSelector(current)}
           <p class="study-timer-status">${current.runningSince ? "Tempo efetivo de estudo" : "Sessão pausada"}</p>
           <output id="study-session-timer" class="study-timer-value" role="timer" aria-live="off" aria-label="Tempo efetivamente estudado">${formatClock(elapsed)}</output>
           <p id="study-session-target-note" class="study-target-note">${renderTargetText(elapsed, current.targetMinutes)}</p>
@@ -797,6 +842,14 @@
       if (!action) return;
       event.preventDefault();
       handleAction(action);
+    });
+    body?.addEventListener("change", (event) => {
+      if (event.target.id !== "study-session-topic" || !activeFlow?.current) return;
+      const selected = event.target.selectedOptions[0];
+      activeFlow.current.topicId = event.target.value;
+      activeFlow.current.topicName = selected?.dataset.topicName || "";
+      saveActiveFlow();
+      toast(activeFlow.current.topicId ? `Tempo vinculado a ${activeFlow.current.topicName}.` : "Sessão sem tópico específico.");
     });
   }
 
@@ -1104,6 +1157,7 @@
     if (!primary || !secondary) return null;
     const normalized = {
       version: ACTIVE_VERSION,
+      extra: candidate.extra === true,
       routineId: String(candidate.routineId).slice(0, 160),
       dayKey: candidate.dayKey,
       phase: candidate.phase,
@@ -1122,6 +1176,8 @@
         slot: expectedSlot,
         subjectId: String(current.subjectId || (expectedSlot === 1 ? primary.subjectId : secondary.subjectId)).slice(0, 100),
         subjectName: String(current.subjectName || (expectedSlot === 1 ? primary.subjectName : secondary.subjectName)).slice(0, 140),
+        topicId: String(current.topicId || (expectedSlot === 1 ? primary.topicId : secondary.topicId) || "").slice(0, 160),
+        topicName: String(current.topicName || (expectedSlot === 1 ? primary.topicName : secondary.topicName) || "").slice(0, 180),
         targetMinutes: clampInteger(current.targetMinutes, 1, 360, expectedSlot === 1 ? primary.targetMinutes : secondary.targetMinutes),
         startedAt: validIso(current.startedAt) || normalized.createdAt,
         accumulatedMs: Math.max(0, Number(current.accumulatedMs) || 0),
@@ -1144,7 +1200,7 @@
 
   function normalizeDescriptor(source, fallbackMinutes) {
     if (!source?.subjectId) return null;
-    return subjectDescriptor(source.subjectId, clampInteger(source.targetMinutes, 1, 360, fallbackMinutes), source.subjectName);
+    return subjectDescriptor(source.subjectId, clampInteger(source.targetMinutes, 1, 360, fallbackMinutes), source.subjectName, source.topicId, source.topicName);
   }
 
   function clearActiveFlow() {
@@ -1169,13 +1225,23 @@
     updateLiveTimerDom();
   }
 
-  function subjectDescriptor(subjectId, targetMinutes, nameOverride = "") {
+  function subjectDescriptor(subjectId, targetMinutes, nameOverride = "", topicIdOverride = "", topicNameOverride = "") {
     const id = String(subjectId || "").slice(0, 100);
+    const focus = safeSubjectFocus(id)?.topic || null;
     return {
       subjectId: id,
       subjectName: String(nameOverride || subjectName(id)).slice(0, 140),
       targetMinutes: clampInteger(targetMinutes, 1, 360, DEFAULT_SETTINGS.primaryTargetMinutes),
+      topicId: String(topicIdOverride || focus?.id || "").slice(0, 160),
+      topicName: String(topicNameOverride || focus?.name || "").slice(0, 180),
     };
+  }
+
+  function renderTopicSelector(current) {
+    const topics = host.getSubjectTopics?.(current.subjectId) || [];
+    if (!topics.length) return "";
+    const options = topics.map((topic) => `<option value="${escapeHTML(topic.id)}" data-topic-name="${escapeHTML(topic.name)}" ${topic.id === current.topicId ? "selected" : ""}>${escapeHTML(topic.name)}</option>`).join("");
+    return `<label class="study-topic-select" for="study-session-topic"><span>Conteúdo desta sessão</span><select id="study-session-topic"><option value="">Sem tópico específico</option>${options}</select><small>O tempo real alimenta o saldo e a comparação com a estimativa.</small></label>`;
   }
 
   function findSubject(subjectId) {
@@ -1184,6 +1250,10 @@
 
   function subjectName(subjectId) {
     return findSubject(subjectId)?.name || String(subjectId || "Matéria").replaceAll("-", " ");
+  }
+
+  function renderSubjectOptions() {
+    return (window.TRAJETORIA_DATA?.subjects || []).map((subject) => `<option value="${escapeHTML(subject.id)}">${escapeHTML(subject.name)}</option>`).join("");
   }
 
   function safeSubjectFocus(subjectId) {

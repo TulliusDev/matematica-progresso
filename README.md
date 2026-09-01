@@ -20,6 +20,7 @@ PWA usa somente APIs nativas do navegador.
 - `index.html`: estrutura semântica, navegação e diálogos reutilizáveis.
 - `styles.css`: identidade escura, componentes, estados e responsividade.
 - `subjects.js`: catálogo curricular e rotina semanal.
+- `planning.js`: datas locais, capacidade, carga, saldo, ritmo e projeção.
 - `storage.js`: estado inicial, normalização, persistência e migrações.
 - `script.js`: recomendações, renderização, interações e módulos especiais.
 - `data/continuous-core.js`: configuração e construtor comum das trilhas.
@@ -28,6 +29,8 @@ PWA usa somente APIs nativas do navegador.
 - `continuous-storage.js`: estado, normalização e desbloqueios das trilhas.
 - `continuous.js`: cards, caminhos, sessões, revisão e registros mínimos.
 - `study.js`: cronômetros, intervalo, restauração, histórico e constância.
+- `tests/planning-tests.html`: testes matemáticos executáveis no navegador.
+- `tests/planning_manual_test.py`: conferência independente das fórmulas.
 - `manifest.webmanifest`: nome, escopo, cores e ícones da PWA.
 - `service-worker.js`: cache versionado do shell local e abertura offline.
 - `icons/`: ícones de instalação e da tela inicial.
@@ -67,10 +70,11 @@ O painel considera automaticamente o dia da semana e mostra:
 - progresso geral e por matéria;
 - dominados, conteúdos ativos e erros;
 - atividade recente.
+- saldo dinâmico de tempo até a prova e detalhes expansíveis.
 
 Uma revisão vencida tem prioridade. Depois, a recomendação segue esta ordem:
 
-1. conteúdo em **Consolidando**;
+1. conteúdo com **Base consolidada** aguardando validação;
 2. conteúdo em **Estudando**;
 3. primeiro conteúdo **Não iniciado** da matéria planejada.
 
@@ -94,14 +98,14 @@ qualquer matéria aceita quatro estados:
 
 - Não iniciado;
 - Estudando;
-- Consolidando;
-- Dominado.
+- Base consolidada;
+- Consolidado em prova.
 
 Também é possível registrar prática, confiança, anotação, erros e revisões.
 
 ### Literatura
 
-As obras ficam fora da rotina obrigatória de 80 minutos. Cada ficha permite
+As obras ficam fora da rotina acadêmica configurada. Cada ficha permite
 registrar progresso de leitura, autor, personagens, narrador, espaço, tempo,
 estrutura, conflitos, temas, símbolos, ironias, linguagem, contexto histórico,
 anotações, trechos e questões relacionadas.
@@ -135,11 +139,31 @@ O banco de questões aceita instituição, ano, matéria, resultado, dificuldade
 observação e resolução. Uma questão pode ser vinculada a vários conteúdos da
 mesma matéria.
 
+## Planejamento até a prova
+
+O planejamento usa minutos como unidade interna e parte da configuração central
+de prova em `planning.js` (29/11/2026, margem de 10%, segunda a sexta). A
+capacidade diária é a soma das duas sessões acadêmicas; o intervalo é ignorado.
+Cada conteúdo começa com esforço **Normal (60 min)** e pode ser alterado para
+Pequeno (30), Grande (90) ou Muito grande (120) sem limitar o cronômetro.
+
+O saldo é `capacidade segura restante - carga-base estimada restante`. A
+capacidade segura parte do orçamento com margem e desconta integralmente dias
+regulares passados e minutos estudados no dia atual. A carga de um conteúdo em
+estudo diminui com sessões vinculadas a ele e zera quando chega a **Base
+consolidada**. **Consolidado em prova** é uma camada separada; conteúdos com base
+mas sem essa validação aparecem na fila de integração.
+
+O ritmo usa os últimos 14 dias. Com menos de três dias distintos de registros, a
+projeção informa que os dados são insuficientes. Sábado e domingo não viram
+capacidade obrigatória, mas qualquer sessão feita nesses dias reduz a carga real.
+
 ## Persistência, sincronização e migração
 
 Todos os dados continuam armazenados no `localStorage`, sob a chave
 `trajetoria-estudos-v3`, para que o site funcione offline. A mesma estrutura agora
-também contém metas, sessões concluídas/incompletas e intervalos. Ao entrar com
+também contém metas, sessões concluídas/incompletas, tópicos vinculados,
+intervalos e a configuração do planejamento. Ao entrar com
 e-mail, esses registros são sincronizados com a tabela `study_progress` do
 Supabase. O cronômetro ainda em andamento usa a chave local separada
 `trajetoria-study-timer-v1`: timestamps absolutos permitem restaurá-lo após

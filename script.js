@@ -5,14 +5,15 @@
   const Storage = window.TrajetoriaStorage;
   const Continuous = window.TrajetoriaContinuous;
   const Study = window.TrajetoriaStudy;
+  const Planning = window.TrajetoriaPlanning;
   const continuousTrails = window.TRAJETORIA_CONTINUOUS.trails;
   const { allTopics, DAY_MS } = Storage;
   const STATUS_WEIGHT = { "not-started": 0, studying: 0.34, consolidating: 0.67, mastered: 1 };
   const STATUS_LABEL = {
     "not-started": "Não iniciado",
     studying: "Estudando",
-    consolidating: "Consolidando",
-    mastered: "Dominado",
+    consolidating: "Base consolidada",
+    mastered: "Consolidado em prova",
   };
   const LITERATURE_FIELDS = [
     "title", "author", "progress", "characters", "narrator", "space", "time",
@@ -33,10 +34,12 @@
   let toastTimer;
   let cloudSync = null;
   let deferredInstallPrompt = null;
+  let planningDayKey = Planning.localDayKey(new Date());
 
   function initialize() {
     cacheElements();
     initializePwa();
+    initializePlanningClock();
     renderSubjectNavigation();
     renderContinuousNavigation();
     populateSubjectSelects();
@@ -50,6 +53,7 @@
       getSubjectFocus,
       navigate,
       addActivity,
+      getSubjectTopics: (subjectId) => allTopics.filter((topic) => topic.subject.id === subjectId),
     });
     navigateFromHash();
     updateNavigationBadges();
@@ -77,6 +81,8 @@
       "sync-detail", "sync-login", "sync-email", "sync-account", "sync-user-email",
       "sync-now", "sync-sign-out", "pwa-install-section", "pwa-install",
       "study-primary-minutes", "study-break-minutes", "study-secondary-minutes",
+      "topic-effort-size", "topic-effort-metrics", "planning-exam-date",
+      "planning-safety-buffer", "planning-daily-minutes",
     ];
     ids.forEach((id) => {
       elements[toCamel(id)] = document.getElementById(id);
@@ -175,6 +181,7 @@
         ${renderLastActivity()}
       </section>
       <section class="home-priority"><div><p class="eyebrow">Objetivo atual · prioridade acadêmica</p><h2>CEFET / COLTEC</h2><p>O painel de preparação continua sendo o foco principal desta fase.</p></div><span>O que estudar agora?</span></section>
+      ${renderPlanningPanel()}
       ${renderDailyRoutine(todaySchedule)}
       ${Study.renderConsistencySection()}
       ${renderFocusCard(focus, "Foco recomendado agora")}
@@ -183,7 +190,7 @@
           <div class="progress-ring" style="--progress:${stats.progress * 3.6}deg"><span>${stats.progress}%</span></div>
           <div class="progress-copy"><p class="stat-label">Progresso da preparação</p><p class="progress-message">${getOverallMessage(stats)}</p><div class="progress-track progress-track-large" role="progressbar" aria-label="Progresso geral" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stats.progress}"><span style="width:${stats.progress}%"></span></div></div>
         </div>
-        ${renderStatCard("✓", stats.mastered, `de ${stats.total}`, "Dominados", "check-icon")}
+        ${renderStatCard("✓", stats.mastered, `de ${stats.total}`, "Consolidados em prova", "check-icon")}
         ${renderStatCard("◐", stats.active, "em andamento", "Estudando", "blocks-icon")}
         ${renderStatCard("↻", stats.due, "pendentes", "Revisões", stats.due ? "review-icon has-value" : "review-icon")}
         ${renderStatCard("!", stats.openErrors, "não revisados", "Erros", stats.openErrors ? "error-icon has-value" : "error-icon")}
@@ -198,16 +205,41 @@
   }
 
   function renderDailyRoutine(todaySchedule) {
-    if (todaySchedule?.type === "weekly-review") {
-      const review = getWeeklyReviewData();
-      return `
-        <section class="daily-plan weekend-plan">
-          <div><p class="eyebrow">Rotina flexível de fim de semana</p><h2>Revisão semanal leve</h2><p>${review.totalItems} item${review.totalItems === 1 ? "" : "s"} reunido${review.totalItems === 1 ? "" : "s"} automaticamente. Você pode concluir no sábado ou domingo.</p></div>
-          <button class="primary-button" type="button" data-action="navigate" data-view-target="review">Abrir revisão →</button>
-        </section>
-      `;
-    }
     return Study.renderDailyRoutine(todaySchedule);
+  }
+
+  function renderPlanningPanel() {
+    const plan = Planning.calculate(state, allTopics);
+    const projection = plan.projectedDate ? `por volta de ${formatPlanningDate(plan.projectedDate)}` : "Dados insuficientes";
+    const pace = plan.recent.reliable ? `${formatMinutes(plan.recent.weeklyMinutes)} por semana` : "Dados insuficientes";
+    const required = plan.requiredWeeklyMinutes === null ? "Prazo encerrado" : `${formatMinutes(plan.requiredWeeklyMinutes)} por semana`;
+    return `
+      <section class="planning-panel planning-${plan.status.id}" aria-labelledby="planning-title">
+        <header class="planning-header"><div><p class="eyebrow">Planejamento até a prova</p><h2 id="planning-title">Quanto tempo ainda tenho de margem?</h2></div><span class="planning-status">${escapeHTML(plan.status.label)}</span></header>
+        <div class="planning-balance"><span>Saldo de tempo</span><strong>${formatSignedMinutes(plan.balanceMinutes)}</strong><small>${escapeHTML(plan.status.description)}</small></div>
+        <div class="planning-summary-grid">
+          <div><span>Prova</span><strong>${formatPlanningDate(plan.examDate, true)}</strong></div>
+          <div><span>Capacidade segura</span><strong>${formatMinutes(plan.safeCapacityMinutes)}</strong></div>
+          <div><span>Carga-base restante</span><strong>${formatMinutes(plan.remainingLoadMinutes)}</strong></div>
+          <div><span>Conclusão projetada</span><strong>${escapeHTML(projection)}</strong></div>
+        </div>
+        <details class="planning-details"><summary>Ver planejamento</summary>
+          <div class="planning-detail-grid">
+            <section><h3>Orçamento de tempo</h3><dl><div><dt>Dias regulares restantes</dt><dd>${plan.remainingRegularDays}</dd></div><div><dt>Capacidade teórica restante</dt><dd>${formatMinutes(plan.theoreticalMinutes)}</dd></div><div><dt>Margem de segurança</dt><dd>${plan.safetyPercent}%</dd></div><div><dt>Capacidade segura restante</dt><dd>${formatMinutes(plan.safeCapacityMinutes)}</dd></div><div><dt>Ritmo recente</dt><dd>${escapeHTML(pace)}</dd></div><div><dt>Ritmo necessário</dt><dd>${escapeHTML(required)}</dd></div></dl></section>
+            <section><h3>Construção da base</h3><p><strong>${plan.baseRemaining.length}</strong> conteúdos ainda precisam chegar a Base consolidada.</p><div class="planning-subject-loads">${plan.bySubject.map((subject) => `<div><span>${escapeHTML(subject.subjectName)}</span><strong>${formatMinutes(subject.remainingMinutes)}</strong></div>`).join("")}</div></section>
+            <section><h3>Bases prontas para testar em prova</h3><p>Inclua aos poucos em questões mistas, testes ou provas anteriores.</p>${plan.integrationQueue.length ? `<ul class="planning-topic-list">${plan.integrationQueue.map((topic) => `<li><span>${escapeHTML(topic.name)}</span><small>${escapeHTML(topic.subjectName)}</small></li>`).join("")}</ul>` : '<p class="planning-empty">Nenhuma base aguardando validação no momento.</p>'}<p class="planning-validation-count">${plan.validated.length} conteúdos já consolidados em prova.</p></section>
+            <section><h3>Tempo real × estimativa</h3>${renderPlanningVariance(plan)}${plan.subjectInsights.length ? `<div class="planning-insights">${plan.subjectInsights.map((item) => `<p>${escapeHTML(item.message)}</p>`).join("")}</div>` : ""}</section>
+          </div>
+        </details>
+      </section>
+    `;
+  }
+
+  function renderPlanningVariance(plan) {
+    const over = plan.overEstimate.slice(0, 6).map((topic) => `<li><span><strong>${escapeHTML(topic.name)}</strong><small>Previsto ${formatMinutes(topic.effort)} · usado ${formatMinutes(topic.used)}</small></span><b>margem −${formatMinutes(topic.variance)}</b></li>`).join("");
+    const under = plan.underEstimate.slice(0, 4).map((topic) => `<li><span><strong>${escapeHTML(topic.name)}</strong><small>Previsto ${formatMinutes(topic.effort)} · usado ${formatMinutes(topic.used)}</small></span><b>ganho ${formatMinutes(Math.abs(topic.variance))}</b></li>`).join("");
+    if (!over && !under) return '<p class="planning-empty">Ainda não há sessões vinculadas suficientes para comparar.</p>';
+    return `${over ? `<p class="planning-list-label">Acima da estimativa</p><ul class="planning-variance-list">${over}</ul>` : ""}${under ? `<p class="planning-list-label">Mais rápidos que o previsto</p><ul class="planning-variance-list planning-gains">${under}</ul>` : ""}`;
   }
 
   function renderRoutineCard(subject, minutes, label) {
@@ -242,7 +274,7 @@
     const stats = getSubjectStats(subject);
     return `
       <button class="subject-progress-card" type="button" data-action="navigate-subject" data-subject-id="${subject.id}">
-        <span class="subject-card-top"><span class="subject-mark" aria-hidden="true">${subject.mark}</span><span><strong>${escapeHTML(subject.name)}</strong><small>${stats.mastered} dominados · ${stats.active} em andamento</small></span><b>${stats.progress}%</b></span>
+        <span class="subject-card-top"><span class="subject-mark" aria-hidden="true">${subject.mark}</span><span><strong>${escapeHTML(subject.name)}</strong><small>${stats.mastered} em prova · ${stats.active} em andamento</small></span><b>${stats.progress}%</b></span>
         <span class="progress-track"><span style="width:${stats.progress}%"></span></span>
       </button>
     `;
@@ -256,18 +288,18 @@
     elements.mainContent.innerHTML = `
       <section class="page-intro subject-intro">
         <div><p class="eyebrow">Trilha de ${escapeHTML(subject.name)}</p><h1>${escapeHTML(subject.name)}</h1><p class="intro-copy">${escapeHTML(subject.description)}</p></div>
-        <div class="subject-summary"><strong>${stats.progress}%</strong><span>${stats.mastered} de ${stats.total} dominados</span></div>
+        <div class="subject-summary"><strong>${stats.progress}%</strong><span>${stats.mastered} de ${stats.total} consolidados em prova</span></div>
       </section>
       ${renderFocusCard(focus, focus?.type === "review" ? "Revisão prioritária" : "Próximo nesta matéria")}
       <section class="insights subject-insights">
         <div class="insight"><span>Estudando</span><strong>${stats.studying}</strong><small>conteúdos ativos</small></div>
-        <div class="insight"><span>Consolidando</span><strong>${stats.consolidating}</strong><small>para reforçar</small></div>
+        <div class="insight"><span>Base consolidada</span><strong>${stats.consolidating}</strong><small>prontos para validar</small></div>
         <div class="insight"><span>Revisões</span><strong>${stats.due}</strong><small>pendentes hoje</small></div>
         <div class="insight"><span>Taxa de acerto</span><strong>${stats.accuracy === null ? "—" : `${stats.accuracy}%`}</strong><small>${stats.practiceTotal ? `${stats.practiceTotal} questões` : "sem prática"}</small></div>
       </section>
       <section class="study-section" id="conteudos">
         <div class="section-heading"><div><p class="eyebrow">Mapa de aprendizagem</p><h2>${subject.chronology ? "Linha de estudo" : "Blocos de estudo"}</h2></div>
-          <div class="view-actions"><label class="select-wrap"><span class="sr-only">Filtrar conteúdos</span><select id="status-filter"><option value="all" ${currentStatusFilter === "all" ? "selected" : ""}>Todos os conteúdos</option><option value="pending" ${currentStatusFilter === "pending" ? "selected" : ""}>Pendentes</option><option value="studying" ${currentStatusFilter === "studying" ? "selected" : ""}>Estudando</option><option value="consolidating" ${currentStatusFilter === "consolidating" ? "selected" : ""}>Consolidando</option><option value="review" ${currentStatusFilter === "review" ? "selected" : ""}>Para revisar</option><option value="mastered" ${currentStatusFilter === "mastered" ? "selected" : ""}>Dominados</option></select></label><button class="text-button" type="button" data-action="toggle-all-blocks">Recolher todos</button></div>
+          <div class="view-actions"><label class="select-wrap"><span class="sr-only">Filtrar conteúdos</span><select id="status-filter"><option value="all" ${currentStatusFilter === "all" ? "selected" : ""}>Todos os conteúdos</option><option value="pending" ${currentStatusFilter === "pending" ? "selected" : ""}>Pendentes</option><option value="studying" ${currentStatusFilter === "studying" ? "selected" : ""}>Estudando</option><option value="consolidating" ${currentStatusFilter === "consolidating" ? "selected" : ""}>Base consolidada</option><option value="review" ${currentStatusFilter === "review" ? "selected" : ""}>Para revisar</option><option value="mastered" ${currentStatusFilter === "mastered" ? "selected" : ""}>Consolidados em prova</option></select></label><button class="text-button" type="button" data-action="toggle-all-blocks">Recolher todos</button></div>
         </div>
         <div class="blocks-grid ${subject.chronology ? "chronology-grid" : ""}" id="blocks-container">${renderBlocks(subject, focus?.topic.id)}</div>
         <p class="empty-state" id="empty-state" ${visibleTopicCount ? "hidden" : ""}>Nenhum conteúdo corresponde a este filtro.</p>
@@ -286,7 +318,7 @@
         <article class="block-card ${stats.complete ? "mastered" : ""}" data-block-id="${block.id}">
           <button class="block-toggle" type="button" data-action="toggle-block" data-block-id="${block.id}" aria-expanded="${expanded}" aria-controls="topics-${block.id}">
             <span class="block-number">${String(blockIndex + 1).padStart(2, "0")}</span>
-            <span class="block-heading"><span class="block-title-row"><h3>${escapeHTML(block.name)}</h3>${stats.complete ? '<span class="mastered-badge">Bloco dominado</span>' : ""}</span><p>${block.period ? `${escapeHTML(block.period)} · ` : ""}${stats.mastered} de ${stats.total} dominados</p></span><span class="chevron" aria-hidden="true">⌄</span>
+            <span class="block-heading"><span class="block-title-row"><h3>${escapeHTML(block.name)}</h3>${stats.complete ? '<span class="mastered-badge">Validado em prova</span>' : ""}</span><p>${block.period ? `${escapeHTML(block.period)} · ` : ""}${stats.mastered} de ${stats.total} consolidados em prova</p></span><span class="chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="block-progress"><div class="progress-track" role="progressbar" aria-label="Progresso de ${escapeHTML(block.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stats.progress}"><span style="width:${stats.progress}%"></span></div><span>${stats.progress}%</span></div>
           <ul class="topic-list" id="topics-${block.id}" ${expanded ? "" : "hidden"}>${block.topics.filter((topic) => topicMatchesFilter(topic.id)).map((topic) => renderTopic(topic, focusTopicId)).join("")}</ul>
@@ -306,7 +338,7 @@
     if (stats.openErrors) evidence.push(`${stats.openErrors} erro${stats.openErrors === 1 ? "" : "s"}`);
     return `
       <li class="topic-item ${statusClass} ${focusTopicId === topic.id ? "recommended" : ""}" id="topic-${topic.id}">
-        <button class="quick-state" type="button" data-action="quick-topic" data-topic-id="${topic.id}" aria-label="${topicState.status === "mastered" ? "Mover para consolidando" : "Marcar como dominado"}"><span aria-hidden="true">${due ? "↻" : topicState.status === "mastered" ? "✓" : topicState.status === "consolidating" ? "◐" : ""}</span></button>
+        <button class="quick-state" type="button" data-action="quick-topic" data-topic-id="${topic.id}" aria-label="${topicState.status === "mastered" ? "Mover para Base consolidada" : topicState.status === "consolidating" ? "Marcar como Consolidado em prova" : "Marcar Base consolidada"}"><span aria-hidden="true">${due ? "↻" : topicState.status === "mastered" ? "✓" : topicState.status === "consolidating" ? "◐" : ""}</span></button>
         <button class="topic-open" type="button" data-action="open-topic" data-topic-id="${topic.id}"><span class="topic-main"><span class="topic-name">${escapeHTML(topic.name)}</span><span class="topic-evidence">${evidence.length ? evidence.join(" · ") : "Sem evidências registradas"}</span></span><span class="topic-meta">${focusTopicId === topic.id ? '<span class="recommended-label">Foco</span>' : ""}<span class="topic-status">${due ? "Revisar" : STATUS_LABEL[topicState.status]}</span><span class="topic-arrow" aria-hidden="true">→</span></span></button>
       </li>
     `;
@@ -338,7 +370,7 @@
       <section class="review-summary"><div><strong>${review.studied.length}</strong><span>estudados na semana</span></div><div><strong>${review.consolidating.length}</strong><span>consolidando</span></div><div><strong>${review.errors.length}</strong><span>erros pendentes</span></div><div><strong>${review.stale.length}</strong><span>sem revisão recente</span></div></section>
       <div class="review-columns">
         ${renderReviewGroup("Estudados nesta semana", "Retome a ideia central sem consultar a anotação.", review.studied)}
-        ${renderReviewGroup("Consolidando", "Resolva novamente antes de marcar como dominado.", review.consolidating)}
+        ${renderReviewGroup("Base consolidada", "Use questões mistas ou reais antes de consolidar em prova.", review.consolidating)}
         ${renderReviewErrorGroup(review.errors)}
         ${renderReviewGroup("Há muito tempo sem revisão", `Mais de ${state.settings.staleReviewDays} dias sem contato.`, review.stale)}
       </div>
@@ -551,6 +583,10 @@
     renderAttempts(topicState);
     renderTopicErrors(topicState);
     elements.practiceFeedback.textContent = "";
+    const planning = Planning.calculate(state, allTopics);
+    const effort = planning.topicRows.find((row) => row.id === currentTopicId);
+    elements.topicEffortSize.value = effort.effortSize;
+    elements.topicEffortMetrics.innerHTML = `<span>Previsto <strong>${formatMinutes(effort.effort)}</strong></span><span>Usado <strong>${formatMinutes(effort.used)}</strong></span><span>${effort.variance > 0 ? "Acima" : "Diferença"} <strong>${formatSignedMinutes(effort.variance)}</strong></span>`;
   }
 
   function setTopicStatus(topicId, newStatus, silent = false) {
@@ -563,7 +599,7 @@
     if (newStatus === "mastered") {
       topicState.masteredAt = topicState.updatedAt;
       topicState.review = { step: 0, lastAt: topicState.review.lastAt, nextAt: addDays(new Date(), state.settings.reviewIntervals[0]).toISOString() };
-      addActivity("mastery", topicId, `${topic.name} dominado em ${topic.subject.name}`);
+      addActivity("mastery", topicId, `${topic.name} consolidado em prova em ${topic.subject.name}`);
     } else {
       topicState.masteredAt = null;
       topicState.review.nextAt = null;
@@ -571,7 +607,7 @@
     }
     persist();
     refreshAfterMutation();
-    if (!silent) showToast(`${topic.name} agora está ${STATUS_LABEL[newStatus].toLowerCase()}.`);
+    if (!silent) showToast(`${topic.name}: ${STATUS_LABEL[newStatus]}.`);
   }
 
   function registerPractice(event) {
@@ -593,7 +629,7 @@
     elements.practiceForm.reset();
     refreshAfterMutation();
     const accuracy = Math.round(correct / total * 100);
-    elements.practiceFeedback.textContent = accuracy >= 80 ? "Boa evidência. Considere consolidar ou dominar se conseguir explicar o raciocínio." : "Prática salva. Registre os erros e tente novamente depois.";
+    elements.practiceFeedback.textContent = accuracy >= 80 ? "Boa evidência. Considere consolidar a base ou validar em prova se conseguir explicar o raciocínio." : "Prática salva. Registre os erros e tente novamente depois.";
     showToast("Prática registrada.");
   }
 
@@ -676,7 +712,7 @@
       topicState.masteredAt = null;
       topicState.review.nextAt = null;
       nextStep = Math.max(0, nextStep - 1);
-      message = "Conteúdo movido para Consolidando.";
+      message = "Conteúdo voltou para Base consolidada.";
     } else {
       nextStep += rating === "easy" ? 2 : 1;
       const interval = state.settings.reviewIntervals[Math.min(nextStep, 3)];
@@ -788,6 +824,10 @@
     elements.studyPrimaryMinutes.value = state.study.settings.primaryTargetMinutes;
     elements.studyBreakMinutes.value = state.study.settings.breakMinutes;
     elements.studySecondaryMinutes.value = state.study.settings.secondaryTargetMinutes;
+    elements.planningExamDate.value = state.planning.examDate;
+    elements.planningSafetyBuffer.value = state.planning.safetyBufferPercent;
+    elements.planningDailyMinutes.textContent = `${state.study.settings.primaryTargetMinutes + state.study.settings.secondaryTargetMinutes} min`;
+    elements.settingsDialog.querySelectorAll('input[name="planning-weekday"]').forEach((input) => { input.checked = state.planning.regularWeekdays.includes(Number(input.value)); });
     elements.intervalSettings.disabled = !state.settings.reviewsEnabled;
     openDialog(elements.settingsDialog);
   }
@@ -795,6 +835,8 @@
   function saveSettings() {
     const intervals = [1, 2, 3, 4].map((index) => Storage.clampNumber(elements[`interval${index}`].value, 1, 365, Storage.DEFAULT_INTERVALS[index - 1]));
     if (!intervals.every((value, index) => index === 0 || value > intervals[index - 1])) return showToast("Os intervalos devem crescer a cada etapa.");
+    const regularWeekdays = [...elements.settingsDialog.querySelectorAll('input[name="planning-weekday"]:checked')].map((input) => Number(input.value));
+    if (!regularWeekdays.length) return showToast("Selecione pelo menos um dia regular de estudo.");
     state.settings.reviewsEnabled = elements.reviewsEnabled.checked;
     state.settings.reopenForgotten = elements.reopenForgotten.checked;
     state.settings.reviewIntervals = intervals;
@@ -803,6 +845,13 @@
       primaryTargetMinutes: Storage.clampNumber(elements.studyPrimaryMinutes.value, 5, 240, Storage.DEFAULT_STUDY_SETTINGS.primaryTargetMinutes),
       breakMinutes: Storage.clampNumber(elements.studyBreakMinutes.value, 1, 60, Storage.DEFAULT_STUDY_SETTINGS.breakMinutes),
       secondaryTargetMinutes: Storage.clampNumber(elements.studySecondaryMinutes.value, 5, 240, Storage.DEFAULT_STUDY_SETTINGS.secondaryTargetMinutes),
+      updatedAt: new Date().toISOString(),
+    };
+    state.planning = {
+      ...state.planning,
+      examDate: elements.planningExamDate.value || Planning.DEFAULT_CONFIG.examDate,
+      safetyBufferPercent: Storage.clampNumber(elements.planningSafetyBuffer.value, 0, 50, Planning.DEFAULT_CONFIG.safetyBufferPercent),
+      regularWeekdays,
       updatedAt: new Date().toISOString(),
     };
     persist();
@@ -833,8 +882,10 @@
         const parsed = JSON.parse(String(reader.result));
         if (!parsed.data?.topics || !["trajetoria", "trajetoria-matematica"].includes(parsed.app)) throw new Error("Formato inválido");
         const currentStudy = state.study;
+        const currentPlanning = state.planning;
         state = parsed.app === "trajetoria-matematica" ? Storage.migrateV2(parsed.data) : Storage.normalizeState(parsed.data);
         if (!Object.prototype.hasOwnProperty.call(parsed.data, "study")) state.study = currentStudy;
+        if (!Object.prototype.hasOwnProperty.call(parsed.data, "planning")) state.planning = currentPlanning;
         if (parsed.continuousData) Continuous.importState(parsed.continuousData, { preserveMissingCheckIns: true });
         persist();
         closeDialog(elements.settingsDialog);
@@ -889,6 +940,9 @@
       });
       if (JSON.stringify(localCefet.settings) === JSON.stringify(defaults.settings)) {
         mergedCefet.settings = remoteCefet.settings;
+      }
+      if (remoteCandidate.planning && !localCefet.planning.updatedAt) {
+        mergedCefet.planning = remoteCefet.planning;
       }
     }
     const localContinuous = localCandidate?.continuousData || Continuous.exportState();
@@ -1001,6 +1055,15 @@
     elements.saveSettings.addEventListener("click", saveSettings);
     elements.exportData.addEventListener("click", exportData);
     elements.importData.addEventListener("change", importData);
+    elements.topicEffortSize.addEventListener("change", () => {
+      if (!currentTopicId || !Planning.EFFORT_MINUTES[elements.topicEffortSize.value]) return;
+      state.planning.topicEfforts[currentTopicId] = elements.topicEffortSize.value;
+      state.planning.updatedAt = new Date().toISOString();
+      persist();
+      populateTopicDialog();
+      renderCurrentView();
+      showToast("Estimativa atualizada; o saldo foi recalculado.");
+    });
     elements.syncSummary.addEventListener("click", openSettings);
     elements.syncLogin.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1029,7 +1092,10 @@
     if (!action) return;
     const name = action.dataset.action;
     if (name === "open-topic") openTopicDialog(action.dataset.topicId);
-    else if (name === "quick-topic") setTopicStatus(action.dataset.topicId, state.topics[action.dataset.topicId].status === "mastered" ? "consolidating" : "mastered");
+    else if (name === "quick-topic") {
+      const current = state.topics[action.dataset.topicId].status;
+      setTopicStatus(action.dataset.topicId, current === "mastered" ? "consolidating" : current === "consolidating" ? "mastered" : "consolidating");
+    }
     else if (name === "navigate-subject") navigate("subject", action.dataset.subjectId);
     else if (name === "navigate-trail") navigate("trail", action.dataset.trailId);
     else if (name === "navigate") navigate(action.dataset.viewTarget);
@@ -1063,6 +1129,9 @@
   function formatDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "data indisponível" : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined }); }
   function formatShortDate(date) { return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }); }
   function formatRelativeDate(value) { const date = new Date(value); const difference = Date.now() - date.getTime(); if (!Number.isFinite(difference)) return "recentemente"; if (difference < 60_000) return "agora"; if (difference < 3_600_000) return `há ${Math.floor(difference / 60_000)} min`; if (difference < DAY_MS) return `há ${Math.floor(difference / 3_600_000)} h`; if (difference < DAY_MS * 7) return `há ${Math.floor(difference / DAY_MS)} d`; return formatDate(date); }
+  function formatMinutes(value) { const minutes = Math.max(0, Math.round(Number(value) || 0)); const hours = Math.floor(minutes / 60); const rest = minutes % 60; return hours && rest ? `${hours}h${String(rest).padStart(2, "0")}` : hours ? `${hours}h` : `${rest} min`; }
+  function formatSignedMinutes(value) { const minutes = Math.round(Number(value) || 0); return `${minutes > 0 ? "+" : minutes < 0 ? "−" : ""}${formatMinutes(Math.abs(minutes))}`; }
+  function formatPlanningDate(value, includeYear = false) { const date = value instanceof Date ? value : Planning.dateFromDayKey(value); return Number.isNaN(date.getTime()) ? "Dado insuficiente" : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: includeYear ? "numeric" : undefined }).replace(".", ""); }
   function getReviewDateText(topicState) { if (!state.settings.reviewsEnabled) return "Revisões desativadas"; if (topicState.status !== "mastered" || !topicState.review.nextAt) return ""; return isReviewDue(currentTopicId) ? "Revisão disponível" : `Próxima revisão: ${formatDate(topicState.review.nextAt)}`; }
   function toCamel(value) { return value.replace(/-([a-z0-9])/g, (_, character) => character.toUpperCase()); }
   function capitalize(value) { return value ? value.charAt(0).toUpperCase() + value.slice(1) : ""; }
@@ -1094,6 +1163,24 @@
           .catch((error) => console.warn("Não foi possível registrar o modo offline.", error));
       }, { once: true });
     }
+  }
+
+  function initializePlanningClock() {
+    const refreshIfDateChanged = () => {
+      const nextDayKey = Planning.localDayKey(new Date());
+      if (nextDayKey === planningDayKey) return;
+      planningDayKey = nextDayKey;
+      state = Storage.normalizeState(state);
+      Storage.saveState(state);
+      if (activeView === "home") renderCurrentView();
+    };
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfDateChanged(); });
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2);
+      window.setTimeout(() => { refreshIfDateChanged(); scheduleMidnightRefresh(); }, Math.max(1000, nextMidnight - now));
+    };
+    scheduleMidnightRefresh();
   }
 
   async function installPwa() {

@@ -13,6 +13,7 @@
     secondaryTargetMinutes: 30,
     updatedAt: null,
   });
+  const DEFAULT_PLANNING = window.TrajetoriaPlanning.DEFAULT_CONFIG;
   const STUDY_RECORD_LIMIT = 3000;
   const MAX_STUDY_SECONDS = 7 * 24 * 60 * 60;
   const INITIAL_REVIEW_OFFSETS = [1, 2, 3, 5, 7, 9, 11];
@@ -90,12 +91,26 @@
       examQuestions: [],
       weeklyReviews: {},
       study: createDefaultStudyState(),
+      planning: createDefaultPlanningState(),
       settings: {
         reviewsEnabled: true,
         reviewIntervals: [...DEFAULT_INTERVALS],
         reopenForgotten: true,
         staleReviewDays: 21,
       },
+    };
+  }
+
+  function createDefaultPlanningState() {
+    const today = new Date();
+    return {
+      version: 1,
+      examDate: DEFAULT_PLANNING.examDate,
+      safetyBufferPercent: DEFAULT_PLANNING.safetyBufferPercent,
+      regularWeekdays: [...DEFAULT_PLANNING.regularWeekdays],
+      startedDay: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`,
+      topicEfforts: Object.fromEntries(allTopics.map((topic) => [topic.id, DEFAULT_PLANNING.defaultEffort])),
+      updatedAt: null,
     };
   }
 
@@ -197,6 +212,7 @@
       examQuestions: Array.isArray(candidate.examQuestions) ? candidate.examQuestions.filter((question) => question?.institution).slice(0, 500) : [],
       weeklyReviews: candidate.weeklyReviews && typeof candidate.weeklyReviews === "object" ? candidate.weeklyReviews : {},
       study: normalizeStudyState(candidate.study),
+      planning: normalizePlanningState(candidate.planning),
       settings: {
         reviewsEnabled: candidate.settings?.reviewsEnabled !== false,
         reviewIntervals: normalizeIntervals(candidate.settings?.reviewIntervals),
@@ -302,6 +318,8 @@
       slot,
       subjectId: normalizeText(source.subjectId, 100),
       subjectName: normalizeText(source.subjectName, 140),
+      topicId: normalizeText(source.topicId, 160),
+      topicName: normalizeText(source.topicName, 180),
       startedAt,
       endedAt,
       effectiveSeconds,
@@ -311,6 +329,29 @@
       createdAt,
       updatedAt: validDate(source.updatedAt) || endedAt || createdAt,
     };
+  }
+
+  function normalizePlanningState(source) {
+    const defaults = createDefaultPlanningState();
+    const validEfforts = new Set(Object.keys(window.TrajetoriaPlanning.EFFORT_MINUTES));
+    return {
+      version: 1,
+      examDate: normalizeDayKey(source?.examDate) || defaults.examDate,
+      safetyBufferPercent: clampNumber(source?.safetyBufferPercent, 0, 50, defaults.safetyBufferPercent),
+      regularWeekdays: normalizeWeekdays(source?.regularWeekdays),
+      startedDay: normalizeDayKey(source?.startedDay) || defaults.startedDay,
+      topicEfforts: Object.fromEntries(allTopics.map((topic) => {
+        const effort = source?.topicEfforts?.[topic.id];
+        return [topic.id, validEfforts.has(effort) ? effort : DEFAULT_PLANNING.defaultEffort];
+      })),
+      updatedAt: validDate(source?.updatedAt),
+    };
+  }
+
+  function normalizeWeekdays(value) {
+    if (!Array.isArray(value)) return [...DEFAULT_PLANNING.regularWeekdays];
+    const days = [...new Set(value.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort();
+    return days.length ? days : [...DEFAULT_PLANNING.regularWeekdays];
   }
 
   function normalizeStudyBreaks(items, settings) {
@@ -412,8 +453,16 @@
       sessions: mergeItems(local.study.sessions, remote.study.sessions, "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT),
       breaks: mergeItems(local.study.breaks, remote.study.breaks, "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT),
     };
+    merged.planning = mergePlanning(local.planning, remote.planning);
     merged.settings = { ...remote.settings, ...local.settings };
     return normalizeState(merged);
+  }
+
+  function mergePlanning(localPlanning, remotePlanning) {
+    const localTime = new Date(localPlanning.updatedAt || 0).getTime();
+    const remoteTime = new Date(remotePlanning.updatedAt || 0).getTime();
+    if (remoteTime > localTime) return { ...remotePlanning, topicEfforts: { ...remotePlanning.topicEfforts } };
+    return { ...localPlanning, topicEfforts: { ...localPlanning.topicEfforts } };
   }
 
   function mergeStudySettings(localSettings, remoteSettings) {
@@ -456,6 +505,7 @@
     DAY_MS,
     DEFAULT_INTERVALS,
     DEFAULT_STUDY_SETTINGS,
+    DEFAULT_PLANNING,
     allTopics,
     createId,
     createDefaultState,
