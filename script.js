@@ -54,6 +54,7 @@
       navigate,
       addActivity,
       getSubjectTopics: (subjectId) => allTopics.filter((topic) => topic.subject.id === subjectId),
+      recordSimulation: recordSimulationSession,
     });
     navigateFromHash();
     updateNavigationBadges();
@@ -75,13 +76,15 @@
       "literature-dialog-title", "exam-dialog", "exam-form", "exam-institution",
       "exam-year", "exam-subject", "exam-topic-options", "exam-result", "exam-difficulty",
       "exam-observation", "exam-solution", "settings-dialog", "reviews-enabled",
+      "simulation-result-dialog", "simulation-result-form", "simulation-result-id", "simulation-result-simulation",
+      "simulation-portugues", "simulation-matematica", "simulation-ciencias", "simulation-historia", "simulation-geografia",
       "interval-settings", "interval-1", "interval-2", "interval-3", "interval-4",
       "reopen-forgotten", "stale-review-days", "save-settings", "export-data",
       "import-data", "reset-progress", "reset-dialog", "sync-summary", "sync-summary-text",
       "sync-detail", "sync-login", "sync-email", "sync-account", "sync-user-email",
       "sync-now", "sync-sign-out", "pwa-install-section", "pwa-install",
       "study-primary-minutes", "study-break-minutes", "study-secondary-minutes",
-      "topic-effort-size", "topic-effort-metrics", "planning-exam-date",
+      "topic-effort-metrics", "topic-budget-value", "planning-exam-date",
       "planning-safety-buffer", "planning-daily-minutes",
     ];
     ids.forEach((id) => {
@@ -210,22 +213,20 @@
 
   function renderPlanningPanel() {
     const plan = Planning.calculate(state, allTopics);
-    const projection = plan.projectedDate ? `por volta de ${formatPlanningDate(plan.projectedDate)}` : "Dados insuficientes";
-    const pace = plan.recent.reliable ? `${formatMinutes(plan.recent.weeklyMinutes)} por semana` : "Dados insuficientes";
-    const required = plan.requiredWeeklyMinutes === null ? "Prazo encerrado" : `${formatMinutes(plan.requiredWeeklyMinutes)} por semana`;
     return `
       <section class="planning-panel planning-${plan.status.id}" aria-labelledby="planning-title">
         <header class="planning-header"><div><p class="eyebrow">Planejamento até a prova</p><h2 id="planning-title">Quanto tempo ainda tenho de margem?</h2></div><span class="planning-status">${escapeHTML(plan.status.label)}</span></header>
         <div class="planning-balance"><span>Saldo de tempo</span><strong>${formatSignedMinutes(plan.balanceMinutes)}</strong><small>${escapeHTML(plan.status.description)}</small></div>
         <div class="planning-summary-grid">
-          <div><span>Prova</span><strong>${formatPlanningDate(plan.examDate, true)}</strong></div>
-          <div><span>Capacidade segura</span><strong>${formatMinutes(plan.safeCapacityMinutes)}</strong></div>
+          <div><span>Meta de hoje</span><strong>${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</strong></div>
           <div><span>Carga-base restante</span><strong>${formatMinutes(plan.remainingLoadMinutes)}</strong></div>
-          <div><span>Conclusão projetada</span><strong>${escapeHTML(projection)}</strong></div>
+          <div><span>Margem</span><strong>${formatSignedMinutes(plan.margin.currentMarginMinutes)}</strong></div>
+          <div><span>Próximo simulado</span><strong>${escapeHTML(nextSimulationLabel())}</strong></div>
         </div>
+        ${renderPlanningHighlights()}
         <details class="planning-details"><summary>Ver planejamento</summary>
           <div class="planning-detail-grid">
-            <section><h3>Orçamento de tempo</h3><dl><div><dt>Dias regulares restantes</dt><dd>${plan.remainingRegularDays}</dd></div><div><dt>Capacidade teórica restante</dt><dd>${formatMinutes(plan.theoreticalMinutes)}</dd></div><div><dt>Margem de segurança</dt><dd>${plan.safetyPercent}%</dd></div><div><dt>Capacidade segura restante</dt><dd>${formatMinutes(plan.safeCapacityMinutes)}</dd></div><div><dt>Ritmo recente</dt><dd>${escapeHTML(pace)}</dd></div><div><dt>Ritmo necessário</dt><dd>${escapeHTML(required)}</dd></div></dl></section>
+            <section><h3>Reservas e aderência</h3><dl><div><dt>Meta de hoje</dt><dd>${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</dd></div><div><dt>Aderência acumulada</dt><dd>${formatSignedMinutes(plan.margin.dailyDeltaMinutes)}</dd></div><div><dt>Integração</dt><dd>${formatMinutes(plan.integrationMinutes)} / 24h</dd></div><div><dt>Correção de simulados</dt><dd>${formatMinutes(plan.simulationReviewMinutes)} / 4h</dd></div></dl></section>
             <section><h3>Construção da base</h3><p><strong>${plan.baseRemaining.length}</strong> conteúdos ainda precisam chegar a Base consolidada.</p><div class="planning-subject-loads">${plan.bySubject.map((subject) => `<div><span>${escapeHTML(subject.subjectName)}</span><strong>${formatMinutes(subject.remainingMinutes)}</strong></div>`).join("")}</div></section>
             <section><h3>Bases prontas para testar em prova</h3><p>Inclua aos poucos em questões mistas, testes ou provas anteriores.</p>${plan.integrationQueue.length ? `<ul class="planning-topic-list">${plan.integrationQueue.map((topic) => `<li><span>${escapeHTML(topic.name)}</span><small>${escapeHTML(topic.subjectName)}</small></li>`).join("")}</ul>` : '<p class="planning-empty">Nenhuma base aguardando validação no momento.</p>'}<p class="planning-validation-count">${plan.validated.length} conteúdos já consolidados em prova.</p></section>
             <section><h3>Tempo real × estimativa</h3>${renderPlanningVariance(plan)}${plan.subjectInsights.length ? `<div class="planning-insights">${plan.subjectInsights.map((item) => `<p>${escapeHTML(item.message)}</p>`).join("")}</div>` : ""}</section>
@@ -240,6 +241,42 @@
     const under = plan.underEstimate.slice(0, 4).map((topic) => `<li><span><strong>${escapeHTML(topic.name)}</strong><small>Previsto ${formatMinutes(topic.effort)} · usado ${formatMinutes(topic.used)}</small></span><b>ganho ${formatMinutes(Math.abs(topic.variance))}</b></li>`).join("");
     if (!over && !under) return '<p class="planning-empty">Ainda não há sessões vinculadas suficientes para comparar.</p>';
     return `${over ? `<p class="planning-list-label">Acima da estimativa</p><ul class="planning-variance-list">${over}</ul>` : ""}${under ? `<p class="planning-list-label">Mais rápidos que o previsto</p><ul class="planning-variance-list planning-gains">${under}</ul>` : ""}`;
+  }
+
+  function renderPlanningHighlights() {
+    const config = window.TRAJETORIA_PLANNING_CONFIG;
+    if (!config) return "";
+    const todayKey = Planning.localDayKey(new Date());
+    const monthKey = todayKey.slice(0, 7);
+    const dailyTarget = config.dailyTargetsMinutes?.[monthKey];
+    const currentSimulation = config.simulationPlan?.find((simulation) => todayKey >= simulation.windowStart && todayKey <= simulation.windowEnd);
+    const nextSimulation = config.simulationPlan?.find((simulation) => todayKey < simulation.windowStart);
+    const simulationText = currentSimulation
+      ? `Semana de simulado · ${formatMinutes(currentSimulation.durationMinutes)}`
+      : nextSimulation
+        ? `Próximo simulado: ${formatPlanningDate(nextSimulation.preferredDate)} · ${formatMinutes(nextSimulation.durationMinutes)}`
+        : "Simulados previstos concluídos";
+    const readyTopics = allTopics.filter((topic) => state.topics[topic.id].status === "consolidating");
+    const list = readyTopics.map((topic) => `<li><button type="button" data-action="open-topic" data-topic-id="${topic.id}">${escapeHTML(topic.name)}<small>${escapeHTML(topic.subject.name)}</small></button></li>`).join("");
+    const workload = config.workload || {};
+    return `
+      <div class="planning-highlights">
+        <div class="planning-highlight-row"><span>Meta diária</span><strong>${dailyTarget ? formatMinutes(dailyTarget) : "0 min"}</strong></div>
+        <div class="planning-highlight-row"><span>Integração</span><strong>${formatMinutes(Planning.calculate(state, allTopics).integrationMinutes)} / 24h</strong></div>
+        <div class="planning-highlight-row"><span>Correção</span><strong>${formatMinutes(Planning.calculate(state, allTopics).simulationReviewMinutes)} / 4h</strong></div>
+        <div class="planning-highlight-row"><span>Simulados realizados</span><strong>${(state.simulations || []).filter((simulation) => simulation.status !== "planned").length} / 4</strong></div>
+        <div class="planning-highlight-row"><span>${escapeHTML(simulationText)}</span></div>
+        <details class="planning-ready"><summary>Prontos para validar em prova: ${readyTopics.length}</summary>${readyTopics.length ? `<ul>${list}</ul>` : '<p class="planning-empty">Nenhum tópico nesta etapa.</p>'}</details>
+        <details class="planning-summary"><summary>Resumo do plano</summary><dl><div><dt>Base inicial estimada</dt><dd>${formatMinutes(workload.baseBudgetTotalMinutes)}</dd></div><div><dt>Integração / questões / revisão</dt><dd>${formatMinutes(workload.integrationReserveMinutes)}</dd></div><div><dt>Correção de simulados</dt><dd>${formatMinutes(workload.simulationReviewReserveMinutes)}</dd></div><div><dt>Simulados</dt><dd>4 × ${formatMinutes(config.exam?.durationMinutes)}</dd></div><div><dt>Margem inicial</dt><dd>${formatMinutes(workload.initialMarginMinutes)}</dd></div></dl></details>
+      </div>
+    `;
+  }
+
+  function nextSimulationLabel() {
+    const config = window.TRAJETORIA_PLANNING_CONFIG;
+    const todayKey = Planning.localDayKey(new Date());
+    const simulation = config?.simulationPlan?.find((item) => todayKey < item.windowStart) || config?.simulationPlan?.find((item) => todayKey >= item.windowStart && todayKey <= item.windowEnd);
+    return simulation ? `${formatPlanningDate(simulation.preferredDate)} · ${formatMinutes(simulation.durationMinutes)}` : "Concluídos";
   }
 
   function renderRoutineCard(subject, minutes, label) {
@@ -301,13 +338,13 @@
         <div class="section-heading"><div><p class="eyebrow">Mapa de aprendizagem</p><h2>${subject.chronology ? "Linha de estudo" : "Blocos de estudo"}</h2></div>
           <div class="view-actions"><label class="select-wrap"><span class="sr-only">Filtrar conteúdos</span><select id="status-filter"><option value="all" ${currentStatusFilter === "all" ? "selected" : ""}>Todos os conteúdos</option><option value="pending" ${currentStatusFilter === "pending" ? "selected" : ""}>Pendentes</option><option value="studying" ${currentStatusFilter === "studying" ? "selected" : ""}>Estudando</option><option value="consolidating" ${currentStatusFilter === "consolidating" ? "selected" : ""}>Base consolidada</option><option value="review" ${currentStatusFilter === "review" ? "selected" : ""}>Para revisar</option><option value="mastered" ${currentStatusFilter === "mastered" ? "selected" : ""}>Consolidados em prova</option></select></label><button class="text-button" type="button" data-action="toggle-all-blocks">Recolher todos</button></div>
         </div>
-        <div class="blocks-grid ${subject.chronology ? "chronology-grid" : ""}" id="blocks-container">${renderBlocks(subject, focus?.topic.id)}</div>
+        <div class="blocks-grid ${subject.chronology ? "chronology-grid" : ""}" id="blocks-container">${renderBlocks(subject, focus?.topic.id, Planning.calculate(state, allTopics).topicRows)}</div>
         <p class="empty-state" id="empty-state" ${visibleTopicCount ? "hidden" : ""}>Nenhum conteúdo corresponde a este filtro.</p>
       </section>
     `;
   }
 
-  function renderBlocks(subject, focusTopicId) {
+  function renderBlocks(subject, focusTopicId, topicRows = []) {
     const visibleBlocks = subject.blocks.filter((block) => block.topics.some((topic) => topicMatchesFilter(topic.id)));
     if (!visibleBlocks.length) return "";
     return visibleBlocks.map((block) => {
@@ -321,13 +358,13 @@
             <span class="block-heading"><span class="block-title-row"><h3>${escapeHTML(block.name)}</h3>${stats.complete ? '<span class="mastered-badge">Validado em prova</span>' : ""}</span><p>${block.period ? `${escapeHTML(block.period)} · ` : ""}${stats.mastered} de ${stats.total} consolidados em prova</p></span><span class="chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="block-progress"><div class="progress-track" role="progressbar" aria-label="Progresso de ${escapeHTML(block.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stats.progress}"><span style="width:${stats.progress}%"></span></div><span>${stats.progress}%</span></div>
-          <ul class="topic-list" id="topics-${block.id}" ${expanded ? "" : "hidden"}>${block.topics.filter((topic) => topicMatchesFilter(topic.id)).map((topic) => renderTopic(topic, focusTopicId)).join("")}</ul>
+          <ul class="topic-list" id="topics-${block.id}" ${expanded ? "" : "hidden"}>${block.topics.filter((topic) => topicMatchesFilter(topic.id)).map((topic) => renderTopic(topic, focusTopicId, topicRows)).join("")}</ul>
         </article>
       `;
     }).join("");
   }
 
-  function renderTopic(topic, focusTopicId) {
+  function renderTopic(topic, focusTopicId, topicRows = []) {
     const topicState = state.topics[topic.id];
     const stats = getTopicStats(topic.id);
     const due = isReviewDue(topic.id);
@@ -336,10 +373,11 @@
     if (stats.accuracy !== null) evidence.push(`${stats.accuracy}% em questões`);
     if (topicState.confidence) evidence.push(`confiança ${topicState.confidence}/5`);
     if (stats.openErrors) evidence.push(`${stats.openErrors} erro${stats.openErrors === 1 ? "" : "s"}`);
+    const used = topicRows.find((row) => row.id === topic.id)?.used || 0;
     return `
       <li class="topic-item ${statusClass} ${focusTopicId === topic.id ? "recommended" : ""}" id="topic-${topic.id}">
         <button class="quick-state" type="button" data-action="quick-topic" data-topic-id="${topic.id}" aria-label="${topicState.status === "mastered" ? "Mover para Base consolidada" : topicState.status === "consolidating" ? "Marcar como Consolidado em prova" : "Marcar Base consolidada"}"><span aria-hidden="true">${due ? "↻" : topicState.status === "mastered" ? "✓" : topicState.status === "consolidating" ? "◐" : ""}</span></button>
-        <button class="topic-open" type="button" data-action="open-topic" data-topic-id="${topic.id}"><span class="topic-main"><span class="topic-name">${escapeHTML(topic.name)}</span><span class="topic-evidence">${evidence.length ? evidence.join(" · ") : "Sem evidências registradas"}</span></span><span class="topic-meta">${focusTopicId === topic.id ? '<span class="recommended-label">Foco</span>' : ""}<span class="topic-status">${due ? "Revisar" : STATUS_LABEL[topicState.status]}</span><span class="topic-arrow" aria-hidden="true">→</span></span></button>
+        <button class="topic-open" type="button" data-action="open-topic" data-topic-id="${topic.id}"><span class="topic-main"><span class="topic-name">${escapeHTML(topic.name)}</span><span class="topic-evidence">${evidence.length ? evidence.join(" · ") : "Sem evidências registradas"}</span></span><span class="topic-meta">${topic.budgetMinutes ? `<span class="topic-budget">Prev. ${formatMinutes(topic.budgetMinutes)}${used ? ` · estudado ${formatMinutes(used)}` : ""}</span>` : ""}${focusTopicId === topic.id ? '<span class="recommended-label">Foco</span>' : ""}<span class="topic-status">${due ? "Revisar" : STATUS_LABEL[topicState.status]}</span><span class="topic-arrow" aria-hidden="true">→</span></span></button>
       </li>
     `;
   }
@@ -406,8 +444,42 @@
     elements.mainContent.innerHTML = `
       <section class="page-intro tool-intro"><div><p class="eyebrow">Preparação direcionada</p><h1>Provas CEFET/COLTEC</h1><p class="intro-copy">Estrutura pronta para relacionar cada questão aos conteúdos da sua trilha.</p></div><button class="primary-button" type="button" data-action="open-exam">Cadastrar questão</button></section>
       <section class="exam-summary"><div><strong>${questions.length}</strong><span>questões cadastradas</span></div><div><strong>${answered.length ? Math.round(correct / answered.length * 100) : "—"}${answered.length ? "%" : ""}</strong><span>taxa de acerto</span></div><div><strong>${questions.filter((q) => q.institution === "CEFET-MG").length}</strong><span>CEFET-MG</span></div><div><strong>${questions.filter((q) => q.institution === "COLTEC").length}</strong><span>COLTEC</span></div></section>
+      <section class="exam-list simulation-list"><div class="section-heading"><div><p class="eyebrow">Planejamento de prova</p><h2>Simulados</h2></div><button class="secondary-button" type="button" data-study-action="start-integration">Iniciar integração</button></div>${(window.TRAJETORIA_PLANNING_CONFIG?.simulationPlan || []).map(renderSimulationCard).join("")}${renderSimulationDiagnostic()}</section>
       ${questions.length ? `<div class="exam-list">${questions.map(renderExamQuestion).join("")}</div>` : renderEmptyState("Banco preparado", "Cadastre questões aos poucos. Uma questão pode ser vinculada a vários conteúdos.", '<button class="secondary-button" type="button" data-action="open-exam">Cadastrar primeira questão</button>')}
     `;
+  }
+
+  function renderSimulationCard(simulation) {
+    const record = (state.simulations || []).find((item) => item.simulationId === simulation.id);
+    const result = record?.result;
+    const total = result ? Object.values(result).reduce((sum, value) => sum + Number(value || 0), 0) : null;
+    const status = record?.status === "reviewed" ? "Correção concluída" : ["completed", "reviewing"].includes(record?.status) ? "Correção pendente" : "Não realizado";
+    return `<article class="exam-card simulation-card"><div class="exam-card-head"><span class="institution-badge">${formatPlanningDate(simulation.preferredDate)} · ${formatMinutes(simulation.durationMinutes)}</span><span>${status}</span></div><h2>Simulado ${escapeHTML(simulation.id.replace("sim-", ""))}</h2><p>${formatPlanningDate(simulation.windowStart)} a ${formatPlanningDate(simulation.windowEnd)}${total === null ? "" : ` · Resultado ${total}/50`}</p><div class="exam-card-footer"><span>${record?.effectiveSeconds ? `Realizado em ${formatMinutes(record.effectiveSeconds / 60)}` : ""}</span><div>${!record ? `<button class="secondary-button" type="button" data-study-action="start-simulation" data-simulation-id="${simulation.id}">Iniciar simulado</button>` : ""}${record && !result ? `<button class="secondary-button" type="button" data-action="open-simulation-result" data-simulation-id="${simulation.id}">Registrar resultado</button>` : ""}${record?.status === "completed" ? `<button class="text-button" type="button" data-action="start-correction" data-simulation-id="${simulation.id}">Iniciar correção</button>` : ""}</div></div></article>`;
+  }
+
+  function renderSimulationDiagnostic() {
+    const records = (state.simulations || []).filter((item) => item.result);
+    if (!records.length) return "";
+    const latest = records[records.length - 1];
+    const limits = { "Português": 15, "Matemática": 15, "Ciências": 8, "História": 6, "Geografia": 6 };
+    const percentages = Object.entries(limits).map(([subject, limit]) => ({ subject, value: Math.round((latest.result[subject] || 0) / limit * 100) }));
+    const lowest = percentages.reduce((current, item) => item.value < current.value ? item : current);
+    const averages = records.length > 1 ? Object.keys(limits).map((subject) => ({ subject, value: Math.round(records.reduce((sum, record) => sum + (record.result[subject] || 0) / limits[subject] * 100, 0) / records.length) })).sort((a, b) => a.value - b.value) : [];
+    const attention = averages.length ? `Ponto de atenção: ${averages[0].subject} · ${averages[0].value}% de média` : `Menor percentual no último simulado: ${lowest.subject} · ${lowest.value}%`;
+    return `<section class="planning-detail-grid simulation-diagnostic"><section><h3>Diagnóstico simples</h3><p>${escapeHTML(attention)}</p><div class="planning-subject-loads">${percentages.map((item) => `<div><span>${escapeHTML(item.subject)}</span><strong>${item.value}%</strong></div>`).join("")}</div></section></section>`;
+  }
+
+  function recordSimulationSession(simulationId, effectiveSeconds, kind = "simulation") {
+    const now = new Date().toISOString();
+    const existing = (state.simulations || []).find((item) => item.simulationId === simulationId);
+    const record = existing || { id: Storage.createId(), simulationId, status: "completed", result: null, correctionMinutes: 0, createdAt: now };
+    record.status = kind === "simulation-review" ? "reviewed" : "completed";
+    if (kind === "simulation-review") record.correctionMinutes = Math.max(0, Math.round(effectiveSeconds / 60));
+    else record.effectiveSeconds = Math.max(0, Math.round(effectiveSeconds));
+    record.updatedAt = now;
+    state.simulations = state.simulations || [];
+    if (!existing) state.simulations.push(record);
+    persist();
   }
 
   function renderExamQuestion(question) {
@@ -585,7 +657,7 @@
     elements.practiceFeedback.textContent = "";
     const planning = Planning.calculate(state, allTopics);
     const effort = planning.topicRows.find((row) => row.id === currentTopicId);
-    elements.topicEffortSize.value = effort.effortSize;
+    elements.topicBudgetValue.textContent = formatMinutes(effort.effort);
     elements.topicEffortMetrics.innerHTML = `<span>Previsto <strong>${formatMinutes(effort.effort)}</strong></span><span>Usado <strong>${formatMinutes(effort.used)}</strong></span><span>${effort.variance > 0 ? "Acima" : "Diferença"} <strong>${formatSignedMinutes(effort.variance)}</strong></span>`;
   }
 
@@ -789,6 +861,56 @@
     elements.examYear.value = new Date().getFullYear();
     updateExamTopicOptions();
     openDialog(elements.examDialog);
+  }
+
+  function openSimulationResultDialog(simulationId) {
+    const simulations = window.TRAJETORIA_PLANNING_CONFIG?.simulationPlan || [];
+    const record = (state.simulations || []).find((item) => item.simulationId === simulationId);
+    elements.simulationResultForm.reset();
+    elements.simulationResultSimulation.innerHTML = simulations.map((simulation) => `<option value="${simulation.id}" ${simulation.id === simulationId ? "selected" : ""}>Simulado ${escapeHTML(simulation.id.replace("sim-", ""))} · ${formatPlanningDate(simulation.preferredDate)}</option>`).join("");
+    const result = record?.result || {};
+    elements.simulationPortugues.value = result["Português"] || 0;
+    elements.simulationMatematica.value = result["Matemática"] || 0;
+    elements.simulationCiencias.value = result["Ciências"] || 0;
+    elements.simulationHistoria.value = result.História || 0;
+    elements.simulationGeografia.value = result.Geografia || 0;
+    openDialog(elements.simulationResultDialog);
+  }
+
+  function submitSimulationResult(event) {
+    event.preventDefault();
+    const values = {
+      "Português": Number(elements.simulationPortugues.value),
+      "Matemática": Number(elements.simulationMatematica.value),
+      "Ciências": Number(elements.simulationCiencias.value),
+      "História": Number(elements.simulationHistoria.value),
+      "Geografia": Number(elements.simulationGeografia.value),
+    };
+    const limits = { "Português": 15, "Matemática": 15, "Ciências": 8, "História": 6, "Geografia": 6 };
+    if (Object.entries(values).some(([subject, value]) => !Number.isInteger(value) || value < 0 || value > limits[subject])) return showToast("Confira os limites do resultado.");
+    const now = new Date().toISOString();
+    const simulationId = elements.simulationResultSimulation.value;
+    const existing = (state.simulations || []).find((item) => item.simulationId === simulationId);
+    const record = existing || { id: Storage.createId(), simulationId, status: "completed", correctionMinutes: 0, createdAt: now };
+    record.result = values;
+    record.status = existing?.status === "reviewed" ? "reviewed" : "completed";
+    record.updatedAt = now;
+    state.simulations = state.simulations || [];
+    if (!existing) state.simulations.push(record);
+    persist();
+    closeDialog(elements.simulationResultDialog);
+    renderCurrentView();
+    showToast("Resultado do simulado salvo.");
+  }
+
+  function startSimulationCorrection(simulationId) {
+    if (state.simulations?.some((item) => item.simulationId === simulationId && item.status === "reviewed")) return;
+    const record = state.simulations?.find((item) => item.simulationId === simulationId);
+    if (!record) return;
+    Study.handleAction({ dataset: { studyAction: "start-integration", simulationId } });
+    const activeRecord = state.simulations.find((item) => item.simulationId === simulationId);
+    if (activeRecord) activeRecord.status = "reviewing";
+    persist();
   }
 
   function updateExamTopicOptions() {
@@ -1038,7 +1160,7 @@
     elements.mainContent.addEventListener("click", handleMainClick);
     elements.mainContent.addEventListener("change", handleMainChange);
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => closeDialog(document.getElementById(button.dataset.closeDialog))));
-    [elements.topicDialog, elements.globalErrorDialog, elements.literatureDialog, elements.examDialog, elements.settingsDialog].forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
+    [elements.topicDialog, elements.globalErrorDialog, elements.literatureDialog, elements.examDialog, elements.simulationResultDialog, elements.settingsDialog].forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
     elements.statePicker.addEventListener("click", (event) => { const button = event.target.closest("[data-state]"); if (button) setTopicStatus(currentTopicId, button.dataset.state); });
     elements.reviewActions.addEventListener("click", (event) => { const button = event.target.closest("[data-rating]"); if (button) rateReview(button.dataset.rating); });
     elements.practiceForm.addEventListener("submit", registerPractice);
@@ -1051,19 +1173,11 @@
     elements.literatureForm.addEventListener("submit", submitLiterature);
     elements.examSubject.addEventListener("change", updateExamTopicOptions);
     elements.examForm.addEventListener("submit", submitExam);
+    elements.simulationResultForm.addEventListener("submit", submitSimulationResult);
     elements.reviewsEnabled.addEventListener("change", () => { elements.intervalSettings.disabled = !elements.reviewsEnabled.checked; });
     elements.saveSettings.addEventListener("click", saveSettings);
     elements.exportData.addEventListener("click", exportData);
     elements.importData.addEventListener("change", importData);
-    elements.topicEffortSize.addEventListener("change", () => {
-      if (!currentTopicId || !Planning.EFFORT_MINUTES[elements.topicEffortSize.value]) return;
-      state.planning.topicEfforts[currentTopicId] = elements.topicEffortSize.value;
-      state.planning.updatedAt = new Date().toISOString();
-      persist();
-      populateTopicDialog();
-      renderCurrentView();
-      showToast("Estimativa atualizada; o saldo foi recalculado.");
-    });
     elements.syncSummary.addEventListener("click", openSettings);
     elements.syncLogin.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1110,6 +1224,8 @@
     else if (name === "edit-literature") openLiteratureDialog(action.dataset.workId);
     else if (name === "delete-literature") deleteLiterature(action.dataset.workId);
     else if (name === "open-exam") openExamDialog();
+    else if (name === "open-simulation-result") openSimulationResultDialog(action.dataset.simulationId);
+    else if (name === "start-correction") startSimulationCorrection(action.dataset.simulationId);
     else if (name === "delete-exam") { state.examQuestions = state.examQuestions.filter((question) => question.id !== action.dataset.questionId); persist(); renderCurrentView(); showToast("Questão removida."); }
   }
 

@@ -5,31 +5,35 @@
   const EFFORT_LABELS = Object.freeze({ small: "Pequeno", normal: "Normal", large: "Grande", "very-large": "Muito grande" });
   const DEFAULT_CONFIG = Object.freeze({
     examDate: "2026-11-29",
+    planStartDate: "2026-09-03",
+    lastRegularStudyDate: "2026-11-27",
+    dailyTargetsMinutes: { "2026-09": 90, "2026-10": 150, "2026-11": 180 },
+    initialMarginMinutes: 630,
+    integrationReserveMinutes: 1440,
+    simulationReviewReserveMinutes: 240,
     safetyBufferPercent: 10,
     regularWeekdays: [1, 2, 3, 4, 5],
     defaultEffort: "normal",
   });
 
   function calculate(state, topics, now = new Date()) {
+    const config = window.TRAJETORIA_PLANNING_CONFIG || {};
     const planning = state.planning || {};
     const today = startOfLocalDay(now);
     const todayKey = localDayKey(today);
-    const exam = dateFromDayKey(planning.examDate || DEFAULT_CONFIG.examDate);
+    const exam = dateFromDayKey(config.dates?.examDate || planning.examDate || DEFAULT_CONFIG.examDate);
+    const planStart = dateFromDayKey(config.dates?.planStartDate || DEFAULT_CONFIG.planStartDate);
+    const lastRegularStudy = dateFromDayKey(config.dates?.lastRegularStudyDate || DEFAULT_CONFIG.lastRegularStudyDate);
     const started = dateFromDayKey(planning.startedDay || todayKey);
     const weekdays = normalizedWeekdays(planning.regularWeekdays);
-    const dailyMinutes = Math.max(1, Number(state.study?.settings?.primaryTargetMinutes || 60) + Number(state.study?.settings?.secondaryTargetMinutes || 30));
+    const dailyMinutes = dailyTargetForDate(today, config);
     const safetyPercent = clamp(Number(planning.safetyBufferPercent), 0, 50, DEFAULT_CONFIG.safetyBufferPercent);
-    const remainingRegularDays = countRegularDays(today, exam, weekdays);
-    const totalWindowDays = countRegularDays(started, exam, weekdays);
-    const elapsedRegularDays = countRegularDays(started, today, weekdays);
-    const todayStudyMinutes = weekdays.includes(today.getDay()) ? studyMinutesForDay(state.study?.sessions, todayKey) : 0;
-    const theoreticalMinutes = Math.max(0, remainingRegularDays * dailyMinutes - todayStudyMinutes);
-    const initialSafeBudget = totalWindowDays * dailyMinutes * (1 - safetyPercent / 100);
-    const safeCapacityMinutes = Math.max(0, Math.round(initialSafeBudget - elapsedRegularDays * dailyMinutes - todayStudyMinutes));
+    const remainingRegularDays = countRegularDays(today, addLocalDays(lastRegularStudy, 1), weekdays);
+    const todayStudyMinutes = studyMinutesForDay(state.study?.sessions, todayKey);
     const topicMinutes = minutesByTopic(state.study?.sessions);
     const topicRows = topics.map((topic) => {
       const topicState = state.topics?.[topic.id] || {};
-      const effort = EFFORT_MINUTES[planning.topicEfforts?.[topic.id]] || EFFORT_MINUTES[DEFAULT_CONFIG.defaultEffort];
+      const effort = Math.max(0, Number(topic.budgetMinutes) || 0);
       const used = Math.round(topicMinutes[topic.id] || 0);
       const baseReady = ["consolidating", "mastered"].includes(topicState.status);
       return {
@@ -39,7 +43,7 @@
         subjectName: topic.subject.name,
         status: topicState.status,
         effort,
-        effortSize: planning.topicEfforts?.[topic.id] || DEFAULT_CONFIG.defaultEffort,
+        effortSize: null,
         used,
         remaining: baseReady ? 0 : Math.max(0, effort - used),
         variance: used - effort,
@@ -48,7 +52,6 @@
       };
     });
     const remainingLoadMinutes = sum(topicRows.map((row) => row.remaining));
-    const balanceMinutes = safeCapacityMinutes - remainingLoadMinutes;
     const baseRemaining = topicRows.filter((row) => !row.baseReady);
     const integrationQueue = topicRows.filter((row) => row.status === "consolidating");
     const validated = topicRows.filter((row) => row.validated);
@@ -57,18 +60,14 @@
     const bySubject = groupBySubject(topicRows);
     const subjectInsights = paceInsights(topicRows);
     const recent = recentPace(state.study?.sessions, today);
-    const safeWeeklyMinutes = dailyMinutes * weekdays.length * (1 - safetyPercent / 100);
-    const safeWeeksRemaining = safeWeeklyMinutes > 0 ? safeCapacityMinutes / safeWeeklyMinutes : 0;
-    const requiredWeeklyMinutes = safeWeeksRemaining > 0 ? Math.ceil(remainingLoadMinutes / safeWeeksRemaining) : null;
-    const projectedDate = recent.reliable && recent.weeklyMinutes > 0
-      ? addLocalDays(today, Math.ceil(remainingLoadMinutes / recent.weeklyMinutes * 7))
-      : null;
+    const margin = calculateMargin(state, topics, today, planStart, lastRegularStudy, weekdays, config);
     return {
-      today, todayKey, examDate: exam, startedDay: started, dailyMinutes, safetyPercent,
-      regularWeekdays: weekdays, remainingRegularDays, theoreticalMinutes, safeCapacityMinutes,
-      remainingLoadMinutes, balanceMinutes, status: balanceStatus(balanceMinutes, safeCapacityMinutes),
+      today, todayKey, examDate: exam, startedDay: started, planStart, lastRegularStudy, dailyMinutes, safetyPercent,
+      regularWeekdays: weekdays, remainingRegularDays, theoreticalMinutes: 0, safeCapacityMinutes: 0,
+      todayStudyMinutes, remainingLoadMinutes, balanceMinutes: margin.currentMarginMinutes, status: margin.status,
       baseRemaining, integrationQueue, validated, overEstimate, underEstimate, topicRows,
-      bySubject, subjectInsights, recent, requiredWeeklyMinutes, projectedDate,
+      bySubject, subjectInsights, recent, requiredWeeklyMinutes: null, projectedDate: null,
+      margin, integrationMinutes: margin.integrationMinutes, simulationReviewMinutes: margin.simulationReviewMinutes,
     };
   }
 
@@ -85,15 +84,70 @@
 
   function studyMinutesForDay(sessions = [], dayKey) {
     return sessions.filter((session) => session.dayKey === dayKey)
-      .reduce((total, session) => total + Math.max(0, Number(session.effectiveSeconds) || 0) / 60, 0);
+      .filter((session) => session.kind !== "simulation")
+      .reduce((total, session) => total + sessionSeconds(session) / 60, 0);
   }
 
   function minutesByTopic(sessions = []) {
     return sessions.reduce((result, session) => {
-      if (!session.topicId) return result;
-      result[session.topicId] = (result[session.topicId] || 0) + Math.max(0, Number(session.effectiveSeconds) || 0) / 60;
+      if (session.kind !== "base") return result;
+      const segments = Array.isArray(session.segments) && session.segments.length ? session.segments : [{ topicId: session.topicId, effectiveSeconds: session.effectiveSeconds }];
+      segments.forEach((segment) => {
+        if (!segment.topicId) return;
+        result[segment.topicId] = (result[segment.topicId] || 0) + Math.max(0, Number(segment.effectiveSeconds) || 0) / 60;
+      });
       return result;
     }, {});
+  }
+
+  function sessionSeconds(session) {
+    if (Array.isArray(session?.segments) && session.segments.length) return session.segments.reduce((total, segment) => total + Math.max(0, Number(segment.effectiveSeconds) || 0), 0);
+    return Math.max(0, Number(session?.effectiveSeconds) || 0);
+  }
+
+  function dailyTargetForDate(date, config = {}) {
+    const target = config.dailyTargetsMinutes?.[localDayKey(date).slice(0, 7)] ?? DEFAULT_CONFIG.dailyTargetsMinutes[localDayKey(date).slice(0, 7)] ?? 0;
+    return [0, 6].includes(date.getDay()) ? 0 : Math.max(0, Number(target) || 0);
+  }
+
+  function calculateMargin(state, topics, today, planStart, lastRegularStudy, weekdays, config) {
+    const sessions = state.study?.sessions || [];
+    const start = planStart.getTime() ? planStart : dateFromDayKey(DEFAULT_CONFIG.planStartDate);
+    const end = lastRegularStudy.getTime() ? lastRegularStudy : dateFromDayKey(DEFAULT_CONFIG.lastRegularStudyDate);
+    let dailyDelta = 0;
+    for (let date = start; date <= end && date <= today; date = addLocalDays(date, 1)) {
+      if (!weekdays.includes(date.getDay())) continue;
+      const target = dailyTargetForDate(date, config);
+      const actual = studyMinutesForDay(sessions, localDayKey(date));
+      dailyDelta += date.getTime() === today.getTime() ? Math.max(0, actual - target) : actual - target;
+    }
+    const topicMinutes = minutesByTopic(sessions);
+    let topicDelta = 0;
+    topics.forEach((topic) => {
+      const actual = topicMinutes[topic.id] || 0;
+      const budget = Math.max(0, Number(topic.budgetMinutes) || 0);
+      const status = state.topics?.[topic.id]?.status;
+      if (["consolidating", "mastered"].includes(status) && actual > 0) topicDelta += budget - actual;
+      else if (!(["consolidating", "mastered"].includes(status)) && actual > budget) topicDelta += budget - actual;
+    });
+    const integrationMinutes = sessions.filter((session) => session.kind === "integration").reduce((total, session) => total + sessionSeconds(session) / 60, 0);
+    const simulationReviewMinutes = sessions.filter((session) => session.kind === "simulation-review").reduce((total, session) => total + sessionSeconds(session) / 60, 0);
+    const initialMargin = Number(config.workload?.initialMarginMinutes ?? DEFAULT_CONFIG.initialMarginMinutes);
+    const integrationReserve = Number(config.workload?.integrationReserveMinutes ?? DEFAULT_CONFIG.integrationReserveMinutes);
+    const reviewReserve = Number(config.workload?.simulationReviewReserveMinutes ?? DEFAULT_CONFIG.simulationReviewReserveMinutes);
+    const currentMarginMinutes = initialMargin + dailyDelta + topicDelta - Math.max(0, integrationMinutes - integrationReserve) - Math.max(0, simulationReviewMinutes - reviewReserve);
+    return {
+      initialMarginMinutes: initialMargin, dailyDeltaMinutes: dailyDelta, topicDeltaMinutes: topicDelta,
+      integrationMinutes, integrationOverrunMinutes: Math.max(0, integrationMinutes - integrationReserve),
+      simulationReviewMinutes, simulationReviewOverrunMinutes: Math.max(0, simulationReviewMinutes - reviewReserve),
+      currentMarginMinutes, status: marginStatus(currentMarginMinutes),
+    };
+  }
+
+  function marginStatus(value) {
+    if (value > 180) return { id: "comfortable", label: "Plano cabe", description: "A margem planejada está acima de 180 minutos." };
+    if (value >= 0) return { id: "attention", label: "Margem curta", description: "A margem existe, mas está entre 0 e 180 minutos." };
+    return { id: "behind", label: "Replanejar", description: "A margem planejada ficou abaixo de zero." };
   }
 
   function recentPace(sessions = [], today = new Date()) {
@@ -134,13 +188,6 @@
     }));
   }
 
-  function balanceStatus(balance, capacity) {
-    if (balance < 0) return { id: "behind", label: "Atrasado", description: "A carga estimada ultrapassa a capacidade segura." };
-    const ratio = capacity > 0 ? balance / capacity : 0;
-    if (ratio >= 0.25) return { id: "comfortable", label: "Confortável", description: "Há uma margem relevante para imprevistos." };
-    if (ratio >= 0.1) return { id: "on-track", label: "No ritmo", description: "A carga cabe dentro do tempo seguro." };
-    return { id: "attention", label: "Atenção", description: "A margem existe, mas está pequena." };
-  }
 
   function normalizedWeekdays(value) {
     if (!Array.isArray(value)) return [...DEFAULT_CONFIG.regularWeekdays];
@@ -166,6 +213,6 @@
 
   window.TrajetoriaPlanning = {
     DEFAULT_CONFIG, EFFORT_MINUTES, EFFORT_LABELS, calculate, countRegularDays,
-    studyMinutesForDay, minutesByTopic, recentPace, dateFromDayKey, localDayKey, addLocalDays,
+    studyMinutesForDay, minutesByTopic, recentPace, dateFromDayKey, localDayKey, addLocalDays, dailyTargetForDate,
   };
 })();

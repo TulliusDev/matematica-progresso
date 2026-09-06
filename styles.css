@@ -840,6 +840,11 @@ select {
   align-items: center;
 }
 
+.topic-budget {
+  color: var(--muted-light);
+  font-size: 10px;
+}
+
 .topic-status {
   color: var(--muted);
   font-size: 10px;
@@ -4037,6 +4042,17 @@ noscript {
 .planning-summary-grid span, .planning-summary-grid strong { display: block; }
 .planning-summary-grid span { margin-bottom: 4px; color: var(--muted); font-size: 11px; }
 .planning-summary-grid strong { font-size: 14px; }
+.planning-highlights { display: grid; gap: 8px; margin-top: 14px; }
+.planning-highlight-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; color: var(--muted-light); font-size: 12px; }
+.planning-highlight-row strong { color: var(--text); }
+.planning-ready, .planning-summary { border-top: 1px solid var(--border); padding-top: 9px; }
+.planning-ready > summary, .planning-summary > summary { color: var(--blue); font-size: 12px; font-weight: 700; cursor: pointer; }
+.planning-ready ul { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.planning-ready li button { display: flex; width: 100%; justify-content: space-between; gap: 12px; padding: 7px 0; border: 0; background: transparent; color: var(--muted-light); text-align: left; cursor: pointer; }
+.planning-ready li small { color: var(--muted); }
+.planning-summary dl { display: grid; gap: 6px; margin: 10px 0 0; }
+.planning-summary dl div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted-light); font-size: 12px; }
+.planning-summary dd { margin: 0; color: var(--text); font-weight: 700; }
 .planning-details { margin-top: 14px; }
 .planning-details > summary { width: fit-content; color: var(--blue); font-weight: 700; cursor: pointer; }
 .planning-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }

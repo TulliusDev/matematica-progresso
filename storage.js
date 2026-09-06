@@ -89,6 +89,7 @@
       activities: [],
       literatureWorks: [],
       examQuestions: [],
+      simulations: [],
       weeklyReviews: {},
       study: createDefaultStudyState(),
       planning: createDefaultPlanningState(),
@@ -210,6 +211,7 @@
       activities: Array.isArray(candidate.activities) ? candidate.activities.filter((item) => item?.timestamp).slice(-200) : [],
       literatureWorks: Array.isArray(candidate.literatureWorks) ? candidate.literatureWorks.filter((work) => work?.title).slice(0, 100) : [],
       examQuestions: Array.isArray(candidate.examQuestions) ? candidate.examQuestions.filter((question) => question?.institution).slice(0, 500) : [],
+      simulations: normalizeSimulations(candidate.simulations),
       weeklyReviews: candidate.weeklyReviews && typeof candidate.weeklyReviews === "object" ? candidate.weeklyReviews : {},
       study: normalizeStudyState(candidate.study),
       planning: normalizePlanningState(candidate.planning),
@@ -320,6 +322,9 @@
       subjectName: normalizeText(source.subjectName, 140),
       topicId: normalizeText(source.topicId, 160),
       topicName: normalizeText(source.topicName, 180),
+      kind: ["base", "integration", "simulation-review", "simulation"].includes(source.kind) ? source.kind : "",
+      simulationId: normalizeIdentifier(source.simulationId),
+      segments: normalizeStudySegments(source.segments),
       startedAt,
       endedAt,
       effectiveSeconds,
@@ -329,6 +334,39 @@
       createdAt,
       updatedAt: validDate(source.updatedAt) || endedAt || createdAt,
     };
+  }
+
+  function normalizeStudySegments(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((segment) => ({
+      topicId: normalizeIdentifier(segment?.topicId),
+      topicName: normalizeText(segment?.topicName, 180),
+      effectiveSeconds: clampStudyNumber(segment?.effectiveSeconds, 0, MAX_STUDY_SECONDS, 0),
+    })).filter((segment) => segment.effectiveSeconds > 0 || segment.topicId);
+  }
+
+  function normalizeSimulations(items) {
+    if (!Array.isArray(items)) return [];
+    return items.filter((item) => item && typeof item === "object").map((item) => ({
+      id: normalizeIdentifier(item.id) || createId(),
+      simulationId: normalizeIdentifier(item.simulationId),
+      status: ["planned", "completed", "reviewing", "reviewed"].includes(item.status) ? item.status : "planned",
+      result: normalizeSimulationResult(item.result),
+      correctionMinutes: clampStudyNumber(item.correctionMinutes, 0, MAX_STUDY_SECONDS / 60, 0),
+      createdAt: validDate(item.createdAt) || new Date().toISOString(),
+      updatedAt: validDate(item.updatedAt) || validDate(item.createdAt) || new Date().toISOString(),
+    })).slice(-20);
+  }
+
+  function normalizeSimulationResult(result) {
+    if (!result || typeof result !== "object") return null;
+    const limits = { "Português": 15, "Matemática": 15, "Ciências": 8, "História": 6, "Geografia": 6 };
+    const normalized = {};
+    Object.entries(limits).forEach(([subject, limit]) => {
+      const value = Number(result[subject]);
+      normalized[subject] = Number.isFinite(value) ? Math.min(limit, Math.max(0, Math.round(value))) : 0;
+    });
+    return normalized;
   }
 
   function normalizePlanningState(source) {
@@ -446,6 +484,7 @@
     merged.activities = mergeItems(local.activities, remote.activities, "timestamp").slice(-200);
     merged.literatureWorks = mergeItems(local.literatureWorks, remote.literatureWorks, "updatedAt", "createdAt").slice(0, 100);
     merged.examQuestions = mergeItems(local.examQuestions, remote.examQuestions, "updatedAt", "createdAt").slice(0, 500);
+    merged.simulations = mergeItems(local.simulations, remote.simulations, "updatedAt", "createdAt").slice(-20);
     merged.weeklyReviews = { ...remote.weeklyReviews, ...local.weeklyReviews };
     merged.study = {
       version: 1,

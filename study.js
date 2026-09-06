@@ -10,7 +10,7 @@
     breakMinutes: 15,
     secondaryTargetMinutes: 30,
   });
-  const VALID_PHASES = new Set(["primary", "break-ready", "break", "secondary-ready", "secondary"]);
+  const VALID_PHASES = new Set(["primary", "break-ready", "break", "secondary-ready", "secondary", "simulation"]);
   const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
   let host = {};
@@ -134,6 +134,10 @@
       startRoutineFromAction(element);
     } else if (action === "start-extra") {
       startExtraSession();
+    } else if (action === "start-integration") {
+      startOpenSession(element.dataset.simulationId ? "simulation-review" : "integration", element.dataset.simulationId || "");
+    } else if (action === "start-simulation") {
+      startSimulation(element.dataset.simulationId);
     } else if (action === "open-active") {
       saveActiveFlow();
       openStudyDialog();
@@ -449,6 +453,36 @@
     saveActiveFlow(); dialogMode = "timer"; syncTick(); host.renderCurrentView?.(); openStudyDialog();
   }
 
+  function startOpenSession(kind, simulationId = "") {
+    if (activeFlow) return openStudyDialog();
+    const subjectId = window.TRAJETORIA_DATA?.subjects?.[0]?.id;
+    const settings = getSettings(getStudyState());
+    const descriptor = subjectDescriptor(subjectId, settings.primaryTargetMinutes, "Integração", "", "");
+    const now = new Date();
+    activeFlow = { version: ACTIVE_VERSION, extra: true, routineId: `study-${kind}-${now.getTime().toString(36)}`, dayKey: localDayKey(now), phase: "primary", primary: descriptor, secondary: descriptor, current: null, breakState: null, createdAt: now.toISOString(), updatedAt: now.toISOString() };
+    activeFlow.current = createCurrentSession(1, descriptor);
+    activeFlow.current.kind = kind;
+    activeFlow.current.simulationId = simulationId;
+    activeFlow.current.topicId = "";
+    activeFlow.current.topicName = "";
+    saveActiveFlow(); dialogMode = "timer"; syncTick(); host.renderCurrentView?.(); openStudyDialog();
+  }
+
+  function startSimulation(simulationId) {
+    if (activeFlow) return openStudyDialog();
+    const subjectId = window.TRAJETORIA_DATA?.subjects?.[0]?.id;
+    const now = new Date();
+    const descriptor = subjectDescriptor(subjectId, 180, "Simulado", "", "");
+    activeFlow = { version: ACTIVE_VERSION, extra: true, simulationId: String(simulationId || ""), routineId: `simulation-${simulationId}-${now.getTime().toString(36)}`, dayKey: localDayKey(now), phase: "simulation", primary: descriptor, secondary: descriptor, current: null, breakState: null, createdAt: now.toISOString(), updatedAt: now.toISOString() };
+    activeFlow.current = createCurrentSession(1, descriptor);
+    activeFlow.current.kind = "simulation";
+    activeFlow.current.topicId = "";
+    activeFlow.current.topicName = "";
+    activeFlow.current.simulationId = activeFlow.simulationId;
+    activeFlow.current.targetMinutes = 180;
+    saveActiveFlow(); dialogMode = "timer"; syncTick(); host.renderCurrentView?.(); openStudyDialog();
+  }
+
   function createCurrentSession(slot, descriptor, previousRecord = null) {
     const now = new Date().toISOString();
     return {
@@ -457,6 +491,12 @@
       subjectName: descriptor.subjectName,
       topicId: previousRecord?.topicId || descriptor.topicId || "",
       topicName: previousRecord?.topicName || descriptor.topicName || "",
+      kind: previousRecord?.kind || "base",
+      simulationId: previousRecord?.simulationId || "",
+      segments: Array.isArray(previousRecord?.segments) && previousRecord.segments.length
+        ? previousRecord.segments.map((segment) => ({ ...segment }))
+        : previousRecord?.topicId && previousRecord?.effectiveSeconds ? [{ topicId: previousRecord.topicId, topicName: previousRecord.topicName || "", effectiveSeconds: previousRecord.effectiveSeconds }] : [],
+      segmentSeconds: Array.isArray(previousRecord?.segments) && previousRecord.segments.length ? previousRecord.segments.reduce((total, segment) => total + Math.max(0, Number(segment.effectiveSeconds) || 0), 0) : previousRecord?.topicId ? Math.max(0, Number(previousRecord.effectiveSeconds) || 0) : 0,
       targetMinutes: descriptor.targetMinutes,
       startedAt: previousRecord?.startedAt || now,
       accumulatedMs: Math.max(0, Number(previousRecord?.effectiveSeconds || 0) * 1000),
@@ -486,7 +526,7 @@
 
   function finishCurrentSession() {
     const current = activeFlow?.current;
-    if (!current || !["primary", "secondary"].includes(activeFlow.phase)) return;
+    if (!current || !["primary", "secondary", "simulation"].includes(activeFlow.phase)) return;
     const now = new Date().toISOString();
     const effectiveSeconds = currentElapsedSeconds(current);
     const study = getStudyState();
@@ -506,17 +546,22 @@
       effectiveSeconds,
       targetMinutes: current.targetMinutes,
       targetMet: effectiveSeconds >= current.targetMinutes * 60,
+      kind: current.kind || "base",
+      simulationId: current.simulationId || "",
+      segments: finalizeSegments(current),
       status: "completed",
       createdAt: existing?.createdAt || current.startedAt || now,
       updatedAt: now,
     };
     upsertById(study.sessions, record);
+    markTopicStudying(current);
     if (existing?.status !== "completed") {
       addActivity("study-session", `Sessão ${current.slot} de ${current.subjectName}: ${formatStudyDuration(effectiveSeconds)}`);
     }
     if (!persistMainState()) return;
 
     if (activeFlow.extra) {
+      if (["simulation", "simulation-review"].includes(current.kind)) host.recordSimulation?.(current.simulationId, effectiveSeconds, current.kind);
       clearActiveFlow();
       closeStudyDialog();
       host.renderCurrentView?.();
@@ -690,11 +735,15 @@
       effectiveSeconds,
       targetMinutes: current.targetMinutes,
       targetMet: effectiveSeconds >= current.targetMinutes * 60,
+      kind: current.kind || "base",
+      simulationId: current.simulationId || "",
+      segments: finalizeSegments(current),
       status: "incomplete",
       createdAt: existing?.createdAt || current.startedAt || now,
       updatedAt: now,
     };
     upsertById(study.sessions, record);
+    markTopicStudying(current);
     addActivity("study-session-incomplete", `Sessão incompleta de ${current.subjectName}: ${formatStudyDuration(effectiveSeconds)}`);
     if (!persistMainState()) return;
     clearActiveFlow();
@@ -715,20 +764,20 @@
       return;
     }
 
-    if (activeFlow.phase === "primary" || activeFlow.phase === "secondary") {
+    if (activeFlow.phase === "primary" || activeFlow.phase === "secondary" || activeFlow.phase === "simulation") {
       const current = activeFlow.current;
       const elapsed = currentElapsedSeconds(current);
-      eyebrow.textContent = `Sessão ${current.slot} · Meta de ${current.targetMinutes} min`;
+      eyebrow.textContent = current.kind === "simulation" ? "Simulado · 180 min" : `Sessão ${current.slot} · Meta de ${current.targetMinutes} min`;
       title.textContent = current.subjectName;
       body.innerHTML = `
         <section class="study-dialog-timer">
-          ${renderTopicSelector(current)}
-          <p class="study-timer-status">${current.runningSince ? "Tempo efetivo de estudo" : "Sessão pausada"}</p>
-          <output id="study-session-timer" class="study-timer-value" role="timer" aria-live="off" aria-label="Tempo efetivamente estudado">${formatClock(elapsed)}</output>
-          <p id="study-session-target-note" class="study-target-note">${renderTargetText(elapsed, current.targetMinutes)}</p>
+          ${current.kind === "base" ? renderTopicSelector(current) : ""}
+          <p class="study-timer-status">${current.runningSince ? current.kind === "simulation" ? "Tempo restante" : "Tempo efetivo de estudo" : "Sessão pausada"}</p>
+          <output id="study-session-timer" class="study-timer-value" role="timer" aria-live="off" aria-label="Tempo do simulado">${current.kind === "simulation" ? formatCountdown(simulationRemainingSeconds(current)) : formatClock(elapsed)}</output>
+          <p id="study-session-target-note" class="study-target-note">${current.kind === "simulation" ? "Você pode finalizar antes do tempo." : renderTargetText(elapsed, current.targetMinutes)}</p>
           <div class="study-dialog-actions">
             <button class="secondary-button study-dialog-action" type="button" data-study-action="${current.runningSince ? "pause" : "continue"}">${current.runningSince ? "Pausar" : "Continuar"}</button>
-            <button class="primary-button study-dialog-action" type="button" data-study-action="finish-subject">Finalizar matéria</button>
+            <button class="primary-button study-dialog-action" type="button" data-study-action="finish-subject">${current.kind === "simulation" ? "Finalizar simulado" : "Finalizar matéria"}</button>
           </div>
           <button class="text-button study-cancel-link" type="button" data-study-action="request-cancel">Cancelar sessão</button>
         </section>
@@ -774,6 +823,33 @@
       `;
     }
     updateLiveTimerDom();
+  }
+
+  function finalizeSegments(current) {
+    recordActiveSegment(current);
+    return (current.segments || []).filter((segment) => segment.effectiveSeconds > 0).map((segment) => ({ ...segment }));
+  }
+
+  function recordActiveSegment(current) {
+    if (!current || current.kind !== "base") return;
+    const elapsed = currentElapsedSeconds(current);
+    const delta = Math.max(0, elapsed - Math.max(0, Number(current.segmentSeconds) || 0));
+    if (delta > 0 && current.topicId) {
+      const last = current.segments?.[current.segments.length - 1];
+      if (last?.topicId === current.topicId) last.effectiveSeconds += delta;
+      else (current.segments ||= []).push({ topicId: current.topicId, topicName: current.topicName, effectiveSeconds: delta });
+    }
+    current.segmentSeconds = elapsed;
+  }
+
+  function markTopicStudying(current) {
+    if (current.kind !== "base" || !current.topicId) return;
+    const topicState = host.getState?.()?.topics?.[current.topicId];
+    if (topicState?.status === "not-started") {
+      topicState.status = "studying";
+      topicState.startedAt ||= new Date().toISOString();
+      topicState.updatedAt = new Date().toISOString();
+    }
   }
 
   function renderCancellationDialog(eyebrow, title, body) {
@@ -846,6 +922,7 @@
     body?.addEventListener("change", (event) => {
       if (event.target.id !== "study-session-topic" || !activeFlow?.current) return;
       const selected = event.target.selectedOptions[0];
+      recordActiveSegment(activeFlow.current);
       activeFlow.current.topicId = event.target.value;
       activeFlow.current.topicName = selected?.dataset.topicName || "";
       saveActiveFlow();
@@ -873,7 +950,7 @@
   function syncTick() {
     stopTick();
     if (!activeFlow) return;
-    if (["primary", "secondary", "break"].includes(activeFlow.phase)) {
+    if (["primary", "secondary", "break", "simulation"].includes(activeFlow.phase)) {
       tickTimer = window.setInterval(tick, 500);
       tick();
     }
@@ -890,6 +967,10 @@
       completeBreak(false);
       return;
     }
+    if (activeFlow.phase === "simulation" && simulationRemainingSeconds(activeFlow.current) <= 0) {
+      finishCurrentSession();
+      return;
+    }
     updateLiveTimerDom();
   }
 
@@ -901,7 +982,7 @@
     if (!activeFlow) return;
     if (activeFlow.current) {
       const seconds = currentElapsedSeconds(activeFlow.current);
-      const clock = formatClock(seconds);
+      const clock = activeFlow.phase === "simulation" ? formatCountdown(simulationRemainingSeconds(activeFlow.current)) : formatClock(seconds);
       const duration = formatStudyDuration(seconds);
       const targetText = renderTargetText(seconds, activeFlow.current.targetMinutes);
       const timer = document.getElementById("study-session-timer");
@@ -933,6 +1014,10 @@
 
   function currentElapsedSeconds(current) {
     return Math.max(0, Math.floor(currentElapsedMilliseconds(current) / 1000));
+  }
+
+  function simulationRemainingSeconds(current) {
+    return Math.max(0, 180 * 60 - currentElapsedSeconds(current));
   }
 
   function breakRemainingMilliseconds(flow) {
@@ -1158,6 +1243,7 @@
     const normalized = {
       version: ACTIVE_VERSION,
       extra: candidate.extra === true,
+      simulationId: String(candidate.simulationId || "").slice(0, 160),
       routineId: String(candidate.routineId).slice(0, 160),
       dayKey: candidate.dayKey,
       phase: candidate.phase,
@@ -1168,7 +1254,7 @@
       createdAt: validIso(candidate.createdAt) || new Date().toISOString(),
       updatedAt: validIso(candidate.updatedAt) || new Date().toISOString(),
     };
-    if (["primary", "secondary"].includes(normalized.phase)) {
+    if (["primary", "secondary", "simulation"].includes(normalized.phase)) {
       const expectedSlot = normalized.phase === "primary" ? 1 : 2;
       const current = candidate.current;
       if (!current || Number(current.slot) !== expectedSlot) return null;
@@ -1178,6 +1264,10 @@
         subjectName: String(current.subjectName || (expectedSlot === 1 ? primary.subjectName : secondary.subjectName)).slice(0, 140),
         topicId: String(current.topicId || (expectedSlot === 1 ? primary.topicId : secondary.topicId) || "").slice(0, 160),
         topicName: String(current.topicName || (expectedSlot === 1 ? primary.topicName : secondary.topicName) || "").slice(0, 180),
+        kind: ["base", "integration", "simulation-review", "simulation"].includes(current.kind) ? current.kind : "base",
+        simulationId: String(current.simulationId || candidate.simulationId || "").slice(0, 160),
+        segments: Array.isArray(current.segments) ? current.segments.map((segment) => ({ topicId: String(segment.topicId || "").slice(0, 160), topicName: String(segment.topicName || "").slice(0, 180), effectiveSeconds: Math.max(0, Number(segment.effectiveSeconds) || 0) })) : [],
+        segmentSeconds: Math.max(0, Number(current.segmentSeconds) || (Array.isArray(current.segments) ? current.segments.reduce((total, segment) => total + Math.max(0, Number(segment.effectiveSeconds) || 0), 0) : 0)),
         targetMinutes: clampInteger(current.targetMinutes, 1, 360, expectedSlot === 1 ? primary.targetMinutes : secondary.targetMinutes),
         startedAt: validIso(current.startedAt) || normalized.createdAt,
         accumulatedMs: Math.max(0, Number(current.accumulatedMs) || 0),
@@ -1227,7 +1317,11 @@
 
   function subjectDescriptor(subjectId, targetMinutes, nameOverride = "", topicIdOverride = "", topicNameOverride = "") {
     const id = String(subjectId || "").slice(0, 100);
-    const focus = safeSubjectFocus(id)?.topic || null;
+    const topics = host.getSubjectTopics?.(id) || [];
+    const focus = topics.find((topic) => host.getState?.()?.topics?.[topic.id]?.status === "studying")
+      || topics.find((topic) => host.getState?.()?.topics?.[topic.id]?.status === "not-started")
+      || safeSubjectFocus(id)?.topic
+      || null;
     return {
       subjectId: id,
       subjectName: String(nameOverride || subjectName(id)).slice(0, 140),

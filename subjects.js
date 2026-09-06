@@ -91,6 +91,9 @@
           topic("pt-coesao-coerencia", "Coesão e coerência"),
           topic("pt-variacao-linguistica", "Variação linguística"),
         ]),
+        block("pt-literatura", "Literatura", [
+          topic("pt-o-alienista", "O Alienista — leitura obrigatória"),
+        ]),
       ],
     },
     {
@@ -307,6 +310,21 @@
       ],
     },
   ];
+
+  const planningConfig = window.TRAJETORIA_PLANNING_CONFIG;
+  const topicBudgets = new Map((planningConfig?.topicBudgets || []).map((item) => [
+    `${item.materia}\u0000${item.bloco}\u0000${item.topico}`,
+    item.peso_minutos_base,
+  ]));
+  subjects.forEach((subject) => subject.blocks.forEach((currentBlock) => currentBlock.topics.forEach((currentTopic) => {
+    const budget = topicBudgets.get(`${subject.name}\u0000${currentBlock.name}\u0000${currentTopic.name}`);
+    if (budget !== undefined) currentTopic.budgetMinutes = budget;
+  })));
+  const requiredLiterature = planningConfig?.requiredLiterature;
+  const alienista = subjects.find((subject) => subject.name === requiredLiterature?.materia)?.blocks
+    .find((currentBlock) => currentBlock.name === requiredLiterature?.bloco)?.topics
+    .find((currentTopic) => currentTopic.name === requiredLiterature?.topico);
+  if (alienista) alienista.budgetMinutes = requiredLiterature.budgetMinutes;
 
   const schedule = {
     0: { type: "weekly-review", label: "Revisão semanal flexível" },
