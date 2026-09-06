@@ -26,6 +26,11 @@
   check("reparo histórico restaura estados conhecidos", S.repairHistoricalTopicStatuses(repaired) && repaired.topics.fatoracao.status === "consolidating" && repaired.topics["his-o-que-e"].status === "mastered");
   const preserved = S.normalizeState({ version: 3, topics: { fatoracao: { status: "studying" }, potenciacao: { status: "studying" }, radiciacao: { status: "studying" }, "expressoes-polinomios": { status: "studying" }, inequacoes: { status: "studying" }, "cie-materia-corpo-objeto": { status: "studying" }, "cie-estados-fisicos": { status: "studying" }, "his-o-que-e": { status: "studying" }, "his-fontes": { status: "studying" }, "his-tempo": { status: "studying" }, "his-pre-historia": { status: "studying" }, "his-mesopotamia": { status: "studying" } } });
   check("reparo histórico não sobrescreve estado atual", !S.repairHistoricalTopicStatuses(preserved) && preserved.topics.fatoracao.status === "studying");
+  const academicWithContinuous = S.mergeStates(
+    S.normalizeState({ version: 3, topics: {}, study: { sessions: [{ id: "academic", kind: "base", createdAt: "2026-09-04T10:00:00Z" }] } }),
+    S.normalizeState({ version: 3, topics: {}, continuousData: { trails: { violao: { checkIns: ["2026-09-04"] } } } }),
+  );
+  check("merge acadêmico não descarta continuousData desconhecido", academicWithContinuous.continuousData?.trails?.violao?.checkIns?.[0] === "2026-09-04");
   const local = S.createDefaultState(); const remote = S.createDefaultState();
   local.planning.updatedAt = "2026-08-30T12:00:00Z"; remote.planning.updatedAt = "2026-08-31T12:00:00Z"; remote.planning.topicEfforts.fracoes = "large";
   check("merge usa planejamento mais recente", S.mergeStates(local, remote).planning.topicEfforts.fracoes === "large");
