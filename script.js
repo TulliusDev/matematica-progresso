@@ -216,7 +216,7 @@
     return `
       <section class="planning-panel planning-${plan.status.id}" aria-labelledby="planning-title">
         <header class="planning-header"><div><p class="eyebrow">Planejamento até a prova</p><h2 id="planning-title">Quanto tempo ainda tenho de margem?</h2></div><span class="planning-status">${escapeHTML(plan.status.label)}</span></header>
-        <div class="planning-balance"><span>Saldo de tempo</span><strong>${formatSignedMinutes(plan.balanceMinutes)}</strong><small>${escapeHTML(plan.status.description)}</small></div>
+        <div class="planning-balance"><span>Margem nominal</span><strong>${formatSignedMinutes(plan.margin.currentMarginMinutes)} · ${escapeHTML(plan.status.label)}</strong><small>${escapeHTML(plan.status.description)}</small><details class="planning-margin-details"><summary>Como foi calculada?</summary>${renderMarginBreakdown(plan)}</details></div>
         <div class="planning-summary-grid">
           <div><span>Meta de hoje</span><strong>${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</strong></div>
           <div><span>Carga-base restante</span><strong>${formatMinutes(plan.remainingLoadMinutes)}</strong></div>
@@ -230,6 +230,8 @@
             <section><h3>Construção da base</h3><p><strong>${plan.baseRemaining.length}</strong> conteúdos ainda precisam chegar a Base consolidada.</p><div class="planning-subject-loads">${plan.bySubject.map((subject) => `<div><span>${escapeHTML(subject.subjectName)}</span><strong>${formatMinutes(subject.remainingMinutes)}</strong></div>`).join("")}</div></section>
             <section><h3>Bases prontas para testar em prova</h3><p>Inclua aos poucos em questões mistas, testes ou provas anteriores.</p>${plan.integrationQueue.length ? `<ul class="planning-topic-list">${plan.integrationQueue.map((topic) => `<li><span>${escapeHTML(topic.name)}</span><small>${escapeHTML(topic.subjectName)}</small></li>`).join("")}</ul>` : '<p class="planning-empty">Nenhuma base aguardando validação no momento.</p>'}<p class="planning-validation-count">${plan.validated.length} conteúdos já consolidados em prova.</p></section>
             <section><h3>Tempo real × estimativa</h3>${renderPlanningVariance(plan)}${plan.subjectInsights.length ? `<div class="planning-insights">${plan.subjectInsights.map((item) => `<p>${escapeHTML(item.message)}</p>`).join("")}</div>` : ""}</section>
+            ${renderEstimateStress(plan)}
+            ${renderCalibration(plan)}
           </div>
         </details>
       </section>
@@ -241,6 +243,29 @@
     const under = plan.underEstimate.slice(0, 4).map((topic) => `<li><span><strong>${escapeHTML(topic.name)}</strong><small>Previsto ${formatMinutes(topic.effort)} · usado ${formatMinutes(topic.used)}</small></span><b>ganho ${formatMinutes(Math.abs(topic.variance))}</b></li>`).join("");
     if (!over && !under) return '<p class="planning-empty">Ainda não há sessões vinculadas suficientes para comparar.</p>';
     return `${over ? `<p class="planning-list-label">Acima da estimativa</p><ul class="planning-variance-list">${over}</ul>` : ""}${under ? `<p class="planning-list-label">Mais rápidos que o previsto</p><ul class="planning-variance-list planning-gains">${under}</ul>` : ""}`;
+  }
+
+  function renderMarginBreakdown(plan) {
+    const rows = [
+      ["Margem inicial", plan.margin.initialMarginMinutes],
+      ["Daily delta", plan.margin.dailyDeltaMinutes],
+      ["Topic delta", plan.margin.topicDeltaMinutes],
+      ["Excesso de integração", -plan.margin.integrationOverrunMinutes],
+      ["Excesso de correção", -plan.margin.simulationReviewOverrunMinutes],
+      ["Margem atual", plan.margin.currentMarginMinutes],
+    ];
+    return `<dl class="planning-margin-breakdown">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${formatSignedMinutes(value)}</dd></div>`).join("")}</dl>`;
+  }
+
+  function renderEstimateStress(plan) {
+    return `<section><h3>Segurança das estimativas</h3><dl class="planning-margin-breakdown"><div><dt>Margem nominal</dt><dd>${formatSignedMinutes(plan.margin.currentMarginMinutes)}</dd></div>${plan.estimateStress.map((item) => `<div><dt>Se conteúdos +${item.percent}%</dt><dd>${formatSignedMinutes(item.marginMinutes)}</dd></div>`).join("")}</dl></section>`;
+  }
+
+  function renderCalibration(plan) {
+    const calibration = plan.calibration;
+    if (calibration.topicCount < 3) return '<section><h3>Calibração real · últimos 7 dias</h3><p class="planning-empty">Amostra ainda pequena.</p></section>';
+    const percentage = calibration.differencePercent === null ? "—" : `${calibration.differencePercent >= 0 ? "+" : ""}${calibration.differencePercent.toFixed(1).replace(".", ",")}%`;
+    return `<section><h3>Calibração real · últimos 7 dias</h3><dl class="planning-margin-breakdown"><div><dt>Tópicos medidos</dt><dd>${calibration.topicCount}</dd></div><div><dt>Previsto</dt><dd>${formatMinutes(calibration.plannedMinutes)}</dd></div><div><dt>Real</dt><dd>${formatMinutes(calibration.actualMinutes)}</dd></div><div><dt>Desvio</dt><dd>${formatSignedMinutes(calibration.differenceMinutes)} (${percentage})</dd></div></dl></section>`;
   }
 
   function renderPlanningHighlights() {

@@ -4036,6 +4036,12 @@ noscript {
 .planning-balance > span { color: var(--muted-light); }
 .planning-balance strong { font-size: clamp(2rem, 6vw, 3.2rem); letter-spacing: -.06em; }
 .planning-balance small { color: var(--muted); }
+.planning-margin-details { margin-top: 10px; font-size: 12px; }
+.planning-margin-details > summary { color: var(--blue); cursor: pointer; }
+.planning-margin-breakdown { display: grid; gap: 6px; margin: 10px 0 0; }
+.planning-margin-breakdown div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted-light); font-size: 12px; }
+.planning-margin-breakdown dt, .planning-margin-breakdown dd { margin: 0; }
+.planning-margin-breakdown dd { color: var(--text); font-weight: 700; }
 .planning-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
 .planning-summary-grid > div { min-width: 0; padding: 14px; }
 .planning-summary-grid > div + div { border-left: 1px solid var(--border); }

@@ -45,7 +45,7 @@
         effort,
         effortSize: null,
         used,
-        remaining: baseReady ? 0 : Math.max(0, effort - used),
+        remaining: baseReady ? 0 : effort,
         variance: used - effort,
         baseReady,
         validated: topicState.status === "mastered",
@@ -61,6 +61,12 @@
     const subjectInsights = paceInsights(topicRows);
     const recent = recentPace(state.study?.sessions, today);
     const margin = calculateMargin(state, topics, today, planStart, lastRegularStudy, weekdays, config);
+    const calibration = calculateCalibration(state, topics, today);
+    const estimateStress = [5, 10, 15].map((percent) => ({
+      percent,
+      additionalMinutes: remainingLoadMinutes * percent / 100,
+      marginMinutes: margin.currentMarginMinutes - remainingLoadMinutes * percent / 100,
+    }));
     return {
       today, todayKey, examDate: exam, startedDay: started, planStart, lastRegularStudy, dailyMinutes, safetyPercent,
       regularWeekdays: weekdays, remainingRegularDays, theoreticalMinutes: 0, safeCapacityMinutes: 0,
@@ -68,6 +74,7 @@
       baseRemaining, integrationQueue, validated, overEstimate, underEstimate, topicRows,
       bySubject, subjectInsights, recent, requiredWeeklyMinutes: null, projectedDate: null,
       margin, integrationMinutes: margin.integrationMinutes, simulationReviewMinutes: margin.simulationReviewMinutes,
+      calibration, estimateStress,
     };
   }
 
@@ -150,6 +157,23 @@
     return { id: "behind", label: "Replanejar", description: "A margem planejada ficou abaixo de zero." };
   }
 
+  function calculateCalibration(state, topics, today) {
+    const firstDay = addLocalDays(today, -6);
+    const firstKey = localDayKey(firstDay);
+    const lastKey = localDayKey(today);
+    const topicMinutes = minutesByTopic((state.study?.sessions || []).filter((session) => session.dayKey >= firstKey && session.dayKey <= lastKey));
+    const measured = topics.filter((topic) => ["consolidating", "mastered"].includes(state.topics?.[topic.id]?.status) && topicMinutes[topic.id] > 0);
+    const plannedMinutes = sum(measured.map((topic) => Number(topic.budgetMinutes) || 0));
+    const actualMinutes = sum(measured.map((topic) => topicMinutes[topic.id]));
+    return {
+      topicCount: measured.length,
+      plannedMinutes,
+      actualMinutes,
+      differenceMinutes: actualMinutes - plannedMinutes,
+      differencePercent: plannedMinutes ? (actualMinutes - plannedMinutes) / plannedMinutes * 100 : null,
+    };
+  }
+
   function recentPace(sessions = [], today = new Date()) {
     const firstDay = addLocalDays(today, -13);
     const firstKey = localDayKey(firstDay);
@@ -213,6 +237,6 @@
 
   window.TrajetoriaPlanning = {
     DEFAULT_CONFIG, EFFORT_MINUTES, EFFORT_LABELS, calculate, countRegularDays,
-    studyMinutesForDay, minutesByTopic, recentPace, dateFromDayKey, localDayKey, addLocalDays, dailyTargetForDate,
+    studyMinutesForDay, minutesByTopic, recentPace, dateFromDayKey, localDayKey, addLocalDays, dailyTargetForDate, calculateCalibration,
   };
 })();

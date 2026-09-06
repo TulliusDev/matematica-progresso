@@ -21,6 +21,20 @@
     "operacoes", "fracoes", "numeros-decimais", "porcentagem", "razao",
     "proporcao", "equacoes", "sistemas", "produtos-notaveis",
   ]);
+  const HISTORICAL_TOPIC_STATUSES = Object.freeze({
+    fatoracao: "consolidating",
+    potenciacao: "consolidating",
+    radiciacao: "consolidating",
+    "expressoes-polinomios": "consolidating",
+    inequacoes: "consolidating",
+    "cie-materia-corpo-objeto": "consolidating",
+    "cie-estados-fisicos": "consolidating",
+    "his-o-que-e": "mastered",
+    "his-fontes": "mastered",
+    "his-tempo": "mastered",
+    "his-pre-historia": "mastered",
+    "his-mesopotamia": "mastered",
+  });
   const aliases = {
     "perimetro-area": ["area", "perimetro"],
     "geometria-espacial-volume": ["volume", "prismas"],
@@ -118,7 +132,11 @@
   function loadState() {
     try {
       const current = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (current?.version === APP_VERSION && current.topics) return normalizeState(current);
+      if (current?.version === APP_VERSION && current.topics) {
+        const normalized = normalizeState(current);
+        if (repairHistoricalTopicStatuses(normalized)) saveState(normalized);
+        return normalized;
+      }
 
       const previous = JSON.parse(localStorage.getItem(V2_STORAGE_KEY));
       if (previous?.topics) {
@@ -206,6 +224,7 @@
   function normalizeState(candidate) {
     const defaults = createDefaultState();
     const normalized = {
+      ...candidate,
       version: APP_VERSION,
       topics: {},
       activities: Array.isArray(candidate.activities) ? candidate.activities.filter((item) => item?.timestamp).slice(-200) : [],
@@ -228,11 +247,25 @@
     return normalized;
   }
 
+  function repairHistoricalTopicStatuses(state) {
+    let changed = false;
+    Object.entries(HISTORICAL_TOPIC_STATUSES).forEach(([topicId, status]) => {
+      const topicState = state.topics?.[topicId];
+      if (!topicState || topicState.status !== "not-started") return;
+      topicState.status = status;
+      topicState.updatedAt = topicState.updatedAt || new Date().toISOString();
+      if (status === "mastered") topicState.masteredAt ||= topicState.updatedAt;
+      changed = true;
+    });
+    return changed;
+  }
+
   function normalizeTopicState(source, fallback) {
     if (!source) return { ...fallback, review: { ...fallback.review }, attempts: [], errors: [] };
     const validStatuses = ["not-started", "studying", "consolidating", "mastered"];
     const status = validStatuses.includes(source.status) ? source.status : fallback.status;
     return {
+      ...source,
       status,
       confidence: clampNumber(source.confidence, 0, 5, 0),
       notes: typeof source.notes === "string" ? source.notes.slice(0, 1200) : "",
@@ -256,6 +289,7 @@
   function normalizeAttempt(attempt) {
     const total = Math.max(1, Math.round(Number(attempt.total)));
     return {
+      ...attempt,
       id: String(attempt.id || createId()),
       correct: Math.min(total, Math.max(0, Math.round(Number(attempt.correct)))),
       total,
@@ -265,6 +299,7 @@
 
   function normalizeError(error) {
     return {
+      ...error,
       id: String(error.id || createId()),
       description: String(error.description || error.text || "").slice(0, 300),
       correctAnswer: String(error.correctAnswer || error.correction || "Não registrada").slice(0, 500),
@@ -278,6 +313,7 @@
   function normalizeStudyState(source) {
     const settings = normalizeStudySettings(source?.settings);
     return {
+      ...source,
       version: 1,
       settings,
       sessions: normalizeStudySessions(source?.sessions, settings),
@@ -287,6 +323,7 @@
 
   function normalizeStudySettings(source) {
     return {
+      ...source,
       primaryTargetMinutes: clampStudyNumber(source?.primaryTargetMinutes, 1, 600, DEFAULT_STUDY_SETTINGS.primaryTargetMinutes),
       breakMinutes: clampStudyNumber(source?.breakMinutes, 1, 180, DEFAULT_STUDY_SETTINGS.breakMinutes),
       secondaryTargetMinutes: clampStudyNumber(source?.secondaryTargetMinutes, 1, 600, DEFAULT_STUDY_SETTINGS.secondaryTargetMinutes),
@@ -314,6 +351,7 @@
     const effectiveSeconds = clampStudyNumber(source.effectiveSeconds, 0, MAX_STUDY_SECONDS, 0);
     const targetMinutes = clampStudyNumber(source.targetMinutes, 1, 600, targetFallback);
     return {
+      ...source,
       id,
       routineId: normalizeIdentifier(source.routineId) || id,
       dayKey: normalizeDayKey(source.dayKey),
@@ -339,6 +377,7 @@
   function normalizeStudySegments(items) {
     if (!Array.isArray(items)) return [];
     return items.map((segment) => ({
+      ...segment,
       topicId: normalizeIdentifier(segment?.topicId),
       topicName: normalizeText(segment?.topicName, 180),
       effectiveSeconds: clampStudyNumber(segment?.effectiveSeconds, 0, MAX_STUDY_SECONDS, 0),
@@ -348,6 +387,7 @@
   function normalizeSimulations(items) {
     if (!Array.isArray(items)) return [];
     return items.filter((item) => item && typeof item === "object").map((item) => ({
+      ...item,
       id: normalizeIdentifier(item.id) || createId(),
       simulationId: normalizeIdentifier(item.simulationId),
       status: ["planned", "completed", "reviewing", "reviewed"].includes(item.status) ? item.status : "planned",
@@ -355,13 +395,14 @@
       correctionMinutes: clampStudyNumber(item.correctionMinutes, 0, MAX_STUDY_SECONDS / 60, 0),
       createdAt: validDate(item.createdAt) || new Date().toISOString(),
       updatedAt: validDate(item.updatedAt) || validDate(item.createdAt) || new Date().toISOString(),
-    })).slice(-20);
+    }));
+    return mergeSimulations(normalized, []).slice(-20);
   }
 
   function normalizeSimulationResult(result) {
     if (!result || typeof result !== "object") return null;
     const limits = { "Português": 15, "Matemática": 15, "Ciências": 8, "História": 6, "Geografia": 6 };
-    const normalized = {};
+    const normalized = { ...result };
     Object.entries(limits).forEach(([subject, limit]) => {
       const value = Number(result[subject]);
       normalized[subject] = Number.isFinite(value) ? Math.min(limit, Math.max(0, Math.round(value))) : 0;
@@ -373,6 +414,7 @@
     const defaults = createDefaultPlanningState();
     const validEfforts = new Set(Object.keys(window.TrajetoriaPlanning.EFFORT_MINUTES));
     return {
+      ...source,
       version: 1,
       examDate: normalizeDayKey(source?.examDate) || defaults.examDate,
       safetyBufferPercent: clampNumber(source?.safetyBufferPercent, 0, 50, defaults.safetyBufferPercent),
@@ -408,6 +450,7 @@
     if (!createdAt) return null;
     const id = normalizeIdentifier(source.id) || createId();
     return {
+      ...source,
       id,
       routineId: normalizeIdentifier(source.routineId) || id,
       dayKey: normalizeDayKey(source.dayKey),
@@ -468,23 +511,34 @@
   function mergeStates(localCandidate, remoteCandidate) {
     const local = normalizeState(localCandidate || {});
     const remote = normalizeState(remoteCandidate || {});
-    const merged = normalizeState(remote);
+    const merged = normalizeState({ ...remote, ...local });
     allTopics.forEach((topic) => {
       const localTopic = local.topics[topic.id];
       const remoteTopic = remote.topics[topic.id];
       const localTime = new Date(localTopic.updatedAt || 0).getTime();
       const remoteTime = new Date(remoteTopic.updatedAt || 0).getTime();
       const newest = localTime >= remoteTime ? localTopic : remoteTopic;
+      const older = newest === localTopic ? remoteTopic : localTopic;
+      const status = topicStatusRank(localTopic.status) >= topicStatusRank(remoteTopic.status)
+        ? localTopic.status
+        : remoteTopic.status;
+      const statusSource = topicStatusRank(localTopic.status) >= topicStatusRank(remoteTopic.status) ? localTopic : remoteTopic;
       merged.topics[topic.id] = {
+        ...older,
         ...newest,
+        status,
         attempts: mergeItems(localTopic.attempts, remoteTopic.attempts, "timestamp").slice(-100),
         errors: mergeItems(localTopic.errors, remoteTopic.errors, "lastReviewedAt", "timestamp").slice(-100),
       };
+      if (status === "mastered") {
+        merged.topics[topic.id].masteredAt ||= statusSource.masteredAt;
+        merged.topics[topic.id].review = { ...merged.topics[topic.id].review, ...statusSource.review };
+      }
     });
     merged.activities = mergeItems(local.activities, remote.activities, "timestamp").slice(-200);
     merged.literatureWorks = mergeItems(local.literatureWorks, remote.literatureWorks, "updatedAt", "createdAt").slice(0, 100);
     merged.examQuestions = mergeItems(local.examQuestions, remote.examQuestions, "updatedAt", "createdAt").slice(0, 500);
-    merged.simulations = mergeItems(local.simulations, remote.simulations, "updatedAt", "createdAt").slice(-20);
+    merged.simulations = mergeSimulations(local.simulations, remote.simulations);
     merged.weeklyReviews = { ...remote.weeklyReviews, ...local.weeklyReviews };
     merged.study = {
       version: 1,
@@ -495,6 +549,22 @@
     merged.planning = mergePlanning(local.planning, remote.planning);
     merged.settings = { ...remote.settings, ...local.settings };
     return normalizeState(merged);
+  }
+
+  function topicStatusRank(status) {
+    return { "not-started": 0, studying: 1, consolidating: 2, mastered: 3 }[status] || 0;
+  }
+
+  function mergeSimulations(localItems = [], remoteItems = []) {
+    const bySimulation = new Map();
+    [...remoteItems, ...localItems].forEach((item) => {
+      const key = item.simulationId || item.id;
+      const existing = bySimulation.get(key);
+      if (!existing || itemDate(item, ["updatedAt", "createdAt"]) >= itemDate(existing, ["updatedAt", "createdAt"])) {
+        bySimulation.set(key, existing ? { ...existing, ...item } : item);
+      }
+    });
+    return [...bySimulation.values()].sort((a, b) => itemDate(a, ["updatedAt", "createdAt"]) - itemDate(b, ["updatedAt", "createdAt"])).slice(-20);
   }
 
   function mergePlanning(localPlanning, remotePlanning) {
@@ -525,7 +595,12 @@
     [...second, ...first].forEach((item) => {
       if (!item?.id) return;
       const existing = items.get(item.id);
-      if (!existing || itemDate(item, dateFields) >= itemDate(existing, dateFields)) items.set(item.id, item);
+      if (!existing) {
+        items.set(item.id, item);
+        return;
+      }
+      const itemIsNewer = itemDate(item, dateFields) >= itemDate(existing, dateFields);
+      items.set(item.id, itemIsNewer ? { ...existing, ...item } : { ...item, ...existing });
     });
     return [...items.values()].sort((a, b) => itemDate(a, dateFields) - itemDate(b, dateFields));
   }
@@ -551,6 +626,7 @@
     loadState,
     migrateV2,
     normalizeState,
+    repairHistoricalTopicStatuses,
     mergeStates,
     saveState,
     clampNumber,

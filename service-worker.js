@@ -1,12 +1,13 @@
 "use strict";
 
 const CACHE_PREFIX = "trajetoria-pwa-";
-const STATIC_CACHE = `${CACHE_PREFIX}static-v3`;
-const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v3`;
+const STATIC_CACHE = `${CACHE_PREFIX}static-v4`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v4`;
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
+  "./planning-config.js",
   "./subjects.js",
   "./planning.js",
   "./storage.js",
