@@ -29,7 +29,7 @@
     const dailyMinutes = dailyTargetForDate(today, config);
     const safetyPercent = clamp(Number(planning.safetyBufferPercent), 0, 50, DEFAULT_CONFIG.safetyBufferPercent);
     const remainingRegularDays = countRegularDays(today, addLocalDays(lastRegularStudy, 1), weekdays);
-    const todayStudyMinutes = studyMinutesForDay(state.study?.sessions, todayKey);
+    const todayStudyMinutes = studyMinutesForDay(state.study?.sessions, todayKey, state.study?.adjustments);
     const topicMinutes = minutesByTopic(state.study?.sessions);
     const topicRows = topics.map((topic) => {
       const topicState = state.topics?.[topic.id] || {};
@@ -89,10 +89,11 @@
     return count;
   }
 
-  function studyMinutesForDay(sessions = [], dayKey) {
-    return sessions.filter((session) => session.dayKey === dayKey)
+  function studyMinutesForDay(sessions = [], dayKey, adjustments = []) {
+    const recorded = sessions.filter((session) => session.dayKey === dayKey)
       .filter((session) => session.kind !== "simulation")
       .reduce((total, session) => total + sessionSeconds(session) / 60, 0);
+    return Math.max(0, recorded + adjustments.filter((entry) => entry.dayKey === dayKey).reduce((total, entry) => total + entry.deltaSeconds / 60, 0));
   }
 
   function minutesByTopic(sessions = []) {
@@ -125,7 +126,7 @@
     for (let date = start; date <= end && date <= today; date = addLocalDays(date, 1)) {
       if (!weekdays.includes(date.getDay())) continue;
       const target = dailyTargetForDate(date, config);
-      const actual = studyMinutesForDay(sessions, localDayKey(date));
+      const actual = studyMinutesForDay(sessions, localDayKey(date), state.study?.adjustments);
       dailyDelta += date.getTime() === today.getTime() ? Math.max(0, actual - target) : actual - target;
     }
     const topicMinutes = minutesByTopic(sessions);

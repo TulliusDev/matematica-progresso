@@ -116,7 +116,7 @@
           <div><span>Últimos 7 dias</span><strong>${sevenStudyDays} ${pluralize(sevenStudyDays, "dia", "dias")} com estudo</strong><small>${sevenComplete} ${pluralize(sevenComplete, "completo", "completos")} · ${sevenPartial} ${pluralize(sevenPartial, "parcial", "parciais")}</small></div>
           <div><span>Últimos 14 dias</span><strong>${fourteenStudyDays} ${pluralize(fourteenStudyDays, "dia", "dias")} com estudo</strong></div>
         </div>
-        ${renderStudyHistory(last7, study)}
+        ${renderStudyHistory(study)}
       </section>
     `;
   }
@@ -125,7 +125,22 @@
     const action = element?.dataset?.studyAction;
     if (!action || element.disabled) return false;
 
-    if (action === "navigate-subject") {
+    if (action === "save-day-time") {
+      const editor = element.closest(".study-time-editor");
+      const hours = editor.querySelector('[name="hours"]');
+      const minutes = editor.querySelector('[name="minutes"]');
+      if (!hours.reportValidity() || !minutes.reportValidity()) return true;
+      if (setDayTotal(element.dataset.dayKey, (Number(hours.value) * 60 + Number(minutes.value)) * 60)) {
+        host.renderCurrentView?.();
+        const history = document.querySelector(".study-history");
+        if (history) history.open = true;
+        toast("Tempo do dia ajustado.");
+      }
+    } else if (action === "cancel-day-time") {
+      const details = element.closest("details");
+      details.open = false;
+      details.querySelectorAll("input").forEach((input) => { input.value = input.defaultValue; });
+    } else if (action === "navigate-subject") {
       saveActiveFlow();
       host.navigate?.("subject", element.dataset.subjectId);
     } else if (action === "open-review") {
@@ -345,12 +360,15 @@
     `;
   }
 
-  function renderStudyHistory(last7, study) {
+  function renderStudyHistory(study) {
+    const days = [...new Set([localDayKey(new Date()), ...study.sessions.map((entry) => entry.dayKey), ...study.breaks.map((entry) => entry.dayKey), ...(study.adjustments || []).map((entry) => entry.dayKey)])].filter(Boolean).sort().reverse();
     return `
       <details class="study-history">
-        <summary><span>Histórico de tempo</span><small>Últimos 7 dias</small></summary>
+        <summary><span>Ver histórico completo</span><small>${days.length} dias</small></summary>
         <div class="study-history-days">
-          ${last7.map((summary, index) => renderHistoryDay(summary, study, index === 0)).join("")}
+          <label>Consultar ou ajustar outra data <input type="date" id="study-history-date" max="${localDayKey(new Date())}" /></label>
+          <div id="study-history-selected-day"></div>
+          ${days.map((day) => renderHistoryDay(summarizeDay(day, study), study, day === localDayKey(new Date()))).join("")}
         </div>
       </details>
     `;
@@ -366,9 +384,18 @@
     return `
       <article class="study-history-day">
         <header><strong>${escapeHTML(formatStudyDate(summary.dayKey, isToday))}</strong><span>${sessions.length} ${pluralize(sessions.length, "sessão registrada", "sessões registradas")}</span></header>
-        <div class="study-history-study-total"><span>Tempo estudado</span><strong>${formatStudyDuration(summary.totalSeconds)}</strong></div>
+        <div class="study-history-study-total"><span>Tempo estudado · ${summary.status === "complete" ? "Completo" : summary.status === "partial" ? "Parcial" : "Nenhum"}</span><strong>${formatStudyDuration(summary.totalSeconds)}</strong></div>
+        ${summary.adjustment ? `<p class="study-history-adjustment">Ajustado manualmente: ${summary.adjustment.deltaSeconds < 0 ? "−" : "+"}${formatStudyDuration(Math.abs(summary.adjustment.deltaSeconds))} · registrado: ${formatStudyDuration(summary.recordedSeconds)} · editado em ${escapeHTML(new Date(summary.adjustment.updatedAt).toLocaleString("pt-BR"))}</p>` : ""}
+        <details><summary>Editar tempo total</summary><div class="study-time-editor">
+          <label>Horas<input name="hours" type="number" min="0" max="24" step="1" required value="${Math.floor(summary.totalSeconds / 3600)}" /></label>
+          <label>Minutos<input name="minutes" type="number" min="0" max="59" step="1" required value="${Math.floor(summary.totalSeconds % 3600 / 60)}" /></label>
+          <button type="button" class="secondary-button" data-study-action="save-day-time" data-day-key="${escapeHTML(summary.dayKey)}">Salvar</button>
+          <button type="button" class="text-button" data-study-action="cancel-day-time">Cancelar</button>
+        </div></details>
+        <details><summary>Sessões e intervalos</summary>
         ${sessions.length ? `<ul class="study-history-sessions">${studyItems}</ul>` : '<p class="study-history-empty">Nenhuma sessão registrada.</p>'}
         ${breaks.length ? `<div class="study-history-interval"><span>Intervalo</span><ul>${breakItems}</ul></div>` : ""}
+        </details>
       </article>
     `;
   }
@@ -898,6 +925,39 @@
     return Boolean(document.getElementById("study-session-dialog")?.open);
   }
 
+  function changeCurrentTopic(topicId, topicName) {
+    if (!activeFlow?.current) return;
+    recordActiveSegment(activeFlow.current);
+    activeFlow.current.topicId = topicId;
+    activeFlow.current.topicName = topicName;
+    saveActiveFlow();
+  }
+
+  function onTopicStatusChanged(topicId, status) {
+    const current = activeFlow?.current;
+    if (!current || current.kind !== "base" || current.topicId !== topicId || !["consolidating", "mastered"].includes(status)) return;
+    const topics = host.getSubjectTopics?.(current.subjectId) || [];
+    const index = topics.findIndex((topic) => topic.id === topicId);
+    if (index < 0) return;
+    const next = topics.slice(index + 1).find((topic) => ["not-started", "studying"].includes(host.getState?.()?.topics?.[topic.id]?.status));
+    changeCurrentTopic(next?.id || "", next?.name || "");
+    if (isStudyDialogOpen()) renderStudyDialog();
+  }
+
+  function setDayTotal(dayKey, totalSeconds) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !Number.isFinite(totalSeconds) || totalSeconds < 0 || totalSeconds > 86400) {
+      toast("Informe um total entre 0 e 24 horas.");
+      return false;
+    }
+    const study = getStudyState();
+    const recorded = summarizeDay(dayKey, study).recordedSeconds;
+    const previous = study.adjustments?.find((entry) => entry.dayKey === dayKey);
+    const now = new Date().toISOString();
+    const adjustment = { id: `manual-adjustment:${dayKey}`, kind: "manual-adjustment", dayKey, deltaSeconds: Math.round(totalSeconds) - recorded, createdAt: previous?.createdAt || now, updatedAt: now };
+    study.adjustments = [...(study.adjustments || []).filter((entry) => entry.dayKey !== dayKey), adjustment];
+    return persistMainState();
+  }
+
   function bindDialogEvents() {
     const dialog = document.getElementById("study-session-dialog");
     const body = document.getElementById("study-session-dialog-body");
@@ -922,16 +982,17 @@
     body?.addEventListener("change", (event) => {
       if (event.target.id !== "study-session-topic" || !activeFlow?.current) return;
       const selected = event.target.selectedOptions[0];
-      recordActiveSegment(activeFlow.current);
-      activeFlow.current.topicId = event.target.value;
-      activeFlow.current.topicName = selected?.dataset.topicName || "";
-      saveActiveFlow();
+      changeCurrentTopic(event.target.value, selected?.dataset.topicName || "");
       toast(activeFlow.current.topicId ? `Tempo vinculado a ${activeFlow.current.topicName}.` : "Sessão sem tópico específico.");
     });
   }
 
   function bindLifecycleEvents() {
     if (initialized) return;
+    document.addEventListener("change", (event) => {
+      if (event.target.id !== "study-history-date" || !event.target.value || !event.target.reportValidity()) return;
+      document.getElementById("study-history-selected-day").innerHTML = renderHistoryDay(summarizeDay(event.target.value, getStudyState()), getStudyState(), false);
+    });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") {
         saveActiveFlow();
@@ -1066,13 +1127,17 @@
   function summarizeDay(dayKey, study) {
     const sessions = study.sessions.filter((session) => session.dayKey === dayKey);
     const completedSlots = new Set(sessions.filter((session) => session.status === "completed").map((session) => Number(session.slot)));
-    const hasAnySession = sessions.length > 0;
+    const recordedSeconds = sessions.reduce((total, session) => total + Math.max(0, Number(session.effectiveSeconds) || 0), 0);
+    const adjustment = study.adjustments?.find((entry) => entry.dayKey === dayKey);
+    const totalSeconds = Math.max(0, recordedSeconds + (adjustment?.deltaSeconds || 0));
+    const targetMinutes = window.TrajetoriaPlanning.dailyTargetForDate(dateFromDayKey(dayKey), window.TRAJETORIA_PLANNING_CONFIG || {});
+    const complete = adjustment ? totalSeconds > 0 && totalSeconds >= targetMinutes * 60 : completedSlots.has(1) && completedSlots.has(2);
     return {
       dayKey,
       date: dateFromDayKey(dayKey),
-      status: completedSlots.has(1) && completedSlots.has(2) ? "complete" : hasAnySession ? "partial" : "empty",
+      status: totalSeconds <= 0 ? "empty" : complete ? "complete" : "partial",
       completedSlots: completedSlots.size,
-      totalSeconds: sessions.reduce((total, session) => total + Math.max(0, Number(session.effectiveSeconds) || 0), 0),
+      totalSeconds, recordedSeconds, adjustment,
     };
   }
 
@@ -1262,8 +1327,8 @@
         slot: expectedSlot,
         subjectId: String(current.subjectId || (expectedSlot === 1 ? primary.subjectId : secondary.subjectId)).slice(0, 100),
         subjectName: String(current.subjectName || (expectedSlot === 1 ? primary.subjectName : secondary.subjectName)).slice(0, 140),
-        topicId: String(current.topicId || (expectedSlot === 1 ? primary.topicId : secondary.topicId) || "").slice(0, 160),
-        topicName: String(current.topicName || (expectedSlot === 1 ? primary.topicName : secondary.topicName) || "").slice(0, 180),
+        topicId: String(current.topicId ?? (expectedSlot === 1 ? primary.topicId : secondary.topicId) ?? "").slice(0, 160),
+        topicName: String(current.topicName ?? (expectedSlot === 1 ? primary.topicName : secondary.topicName) ?? "").slice(0, 180),
         kind: ["base", "integration", "simulation-review", "simulation"].includes(current.kind) ? current.kind : "base",
         simulationId: String(current.simulationId || candidate.simulationId || "").slice(0, 160),
         segments: Array.isArray(current.segments) ? current.segments.map((segment) => ({ topicId: String(segment.topicId || "").slice(0, 160), topicName: String(segment.topicName || "").slice(0, 180), effectiveSeconds: Math.max(0, Number(segment.effectiveSeconds) || 0) })) : [],
@@ -1481,5 +1546,6 @@
     handleAction,
     applyExternalState,
     resetActiveSession,
+    onTopicStatusChanged,
   };
 })();

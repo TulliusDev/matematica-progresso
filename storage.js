@@ -317,8 +317,21 @@
       version: 1,
       settings,
       sessions: normalizeStudySessions(source?.sessions, settings),
+      adjustments: normalizeStudyAdjustments(source?.adjustments),
       breaks: normalizeStudyBreaks(source?.breaks, settings),
     };
+  }
+
+  function normalizeStudyAdjustments(items = []) {
+    if (!Array.isArray(items)) return [];
+    return mergeItems(items.filter((item) => item && normalizeDayKey(item.dayKey) && Number.isFinite(Number(item.deltaSeconds))).map((item) => ({
+      id: `manual-adjustment:${item.dayKey}`,
+      kind: "manual-adjustment",
+      dayKey: item.dayKey,
+      deltaSeconds: Math.round(Number(item.deltaSeconds)),
+      createdAt: validDate(item.createdAt),
+      updatedAt: validDate(item.updatedAt) || validDate(item.createdAt),
+    })), [], "updatedAt", "createdAt");
   }
 
   function normalizeStudySettings(source) {
@@ -544,6 +557,7 @@
       version: 1,
       settings: mergeStudySettings(local.study.settings, remote.study.settings),
       sessions: mergeItems(local.study.sessions, remote.study.sessions, "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT),
+      adjustments: mergeItems(local.study.adjustments, remote.study.adjustments, "updatedAt", "createdAt"),
       breaks: mergeItems(local.study.breaks, remote.study.breaks, "updatedAt", "endedAt", "createdAt", "startedAt").slice(-STUDY_RECORD_LIMIT),
     };
     merged.planning = mergePlanning(local.planning, remote.planning);

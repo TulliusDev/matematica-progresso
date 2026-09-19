@@ -2077,6 +2077,19 @@ noscript {
   grid-column: 1 / -1;
 }
 
+.subject-progress-card > .progress-track {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.study-time-editor { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 12px; }
+.study-time-editor label { display: grid; gap: 5px; }
+.study-time-editor input { width: 90px; max-width: 100%; }
+.study-history-adjustment { color: var(--muted); font-size: 12px; }
+
 .subject-card-top {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

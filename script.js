@@ -422,7 +422,7 @@
 
   function renderGlobalError(item) {
     const { topic, error } = item;
-    return `<article class="global-error-card ${error.resolved ? "resolved" : ""}"><div class="error-card-head"><span class="subject-chip">${escapeHTML(topic.subject.name)}</span><span>${formatDate(error.timestamp)}</span></div><button class="error-topic-link" type="button" data-action="open-topic" data-topic-id="${topic.id}">${escapeHTML(topic.name)} →</button><h3>${escapeHTML(error.description)}</h3><p><strong>Compreensão correta</strong>${escapeHTML(error.correctAnswer)}</p><div class="error-card-footer"><span>${error.reviewCount} revisão${error.reviewCount === 1 ? "" : "ões"}</span><div>${error.resolved ? `<button class="text-button" type="button" data-action="reopen-error" data-topic-id="${topic.id}" data-error-id="${error.id}">Reabrir</button>` : `<button class="secondary-button" type="button" data-action="review-error" data-topic-id="${topic.id}" data-error-id="${error.id}">Marcar revisado</button>`}<button class="icon-text-button danger-text" type="button" data-action="delete-error" data-topic-id="${topic.id}" data-error-id="${error.id}">Excluir</button></div></div></article>`;
+    return `<article class="global-error-card ${error.resolved ? "resolved" : ""}"><div class="error-card-head"><span class="subject-chip">${escapeHTML(topic.subject.name)}</span><span>${formatDate(error.timestamp)}</span></div><button class="error-topic-link" type="button" data-action="open-topic" data-topic-id="${topic.id}">${escapeHTML(topic.name)} →</button><h3>${escapeHTML(error.description)}</h3><p><strong>Compreensão correta</strong>${escapeHTML(error.correctAnswer)}</p><div class="error-card-footer"><span>${error.reviewCount} ${error.reviewCount === 1 ? "revisão" : "revisões"}</span><div>${error.resolved ? `<button class="text-button" type="button" data-action="reopen-error" data-topic-id="${topic.id}" data-error-id="${error.id}">Reabrir</button>` : `<button class="secondary-button" type="button" data-action="review-error" data-topic-id="${topic.id}" data-error-id="${error.id}">Marcar revisado</button>`}<button class="icon-text-button danger-text" type="button" data-action="delete-error" data-topic-id="${topic.id}" data-error-id="${error.id}">Excluir</button></div></div></article>`;
   }
 
   function renderWeeklyReviewPage() {
@@ -634,7 +634,7 @@
   }
 
   function getOverallMessage(stats) {
-    if (stats.due) return `${stats.due} revisão${stats.due === 1 ? "" : "ões"} merece${stats.due === 1 ? "" : "m"} atenção hoje.`;
+    if (stats.due) return `${stats.due} ${stats.due === 1 ? "revisão" : "revisões"} merece${stats.due === 1 ? "" : "m"} atenção hoje.`;
     if (stats.progress >= 75) return "A preparação entrou na reta final.";
     if (stats.progress >= 40) return "A base interdisciplinar está ganhando consistência.";
     return "Cada conceito consolidado reduz a incerteza na prova.";
@@ -691,6 +691,7 @@
     const topicState = state.topics[topicId];
     if (!topic || topicState.status === newStatus) return;
     topicState.status = newStatus;
+    Study.onTopicStatusChanged(topicId, newStatus);
     topicState.updatedAt = new Date().toISOString();
     if (newStatus !== "not-started") topicState.startedAt ||= topicState.updatedAt;
     if (newStatus === "mastered") {
