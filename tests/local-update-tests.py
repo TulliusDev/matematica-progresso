@@ -29,7 +29,7 @@ try:
           const S = TrajetoriaStorage, P = TrajetoriaPlanning, T = studyTest;
           let count = 0;
           const check = (value, name) => { if (!value) throw Error(name); count++; };
-          const day = '2026-09-03';
+          const day = '2026-09-23';
           const session = {id:'real', dayKey:day, kind:'base', topicId:'a', effectiveSeconds:1200, createdAt:day+'T12:00:00Z'};
           let state = S.normalizeState({topics:{}, study:{sessions:[session]}});
           const topics = ['a','b','c'].map(id => ({id,name:id,budgetMinutes:60,subject:{id:'mat',name:'Mat'}}));
@@ -43,8 +43,8 @@ try:
           check(state.study.adjustments.length===1 && state.study.adjustments[0].deltaSeconds===1500, 'replace25');
           check(!T.setDayTotal(day,-1), 'negative rejected');
           check(JSON.stringify(state.study.sessions)===original,'original sessions untouched');
-          const before = P.calculate({...state,study:{...state.study,adjustments:[]}},topics,P.dateFromDayKey('2026-09-04'));
-          const after = P.calculate(state,topics,P.dateFromDayKey('2026-09-04'));
+          const before = P.calculate({...state,study:{...state.study,adjustments:[]}},topics,P.dateFromDayKey('2026-09-24'));
+          const after = P.calculate(state,topics,P.dateFromDayKey('2026-09-24'));
           check(after.margin.dailyDeltaMinutes-before.margin.dailyDeltaMinutes===25,'daily delta');
           check(after.margin.topicDeltaMinutes===before.margin.topicDeltaMinutes,'topic delta');
           check(P.minutesByTopic(state.study.sessions).a===20,'calibration source');
@@ -85,7 +85,7 @@ try:
           }
           state.study.sessions.push({...session,id:'second',dayKey:'2026-09-02',effectiveSeconds:600});
           const html = T.renderStudyHistory(state.study);
-          check(html.indexOf('data-day-key="2026-09-03"')<html.indexOf('data-day-key="2026-09-02"'),'history descending');
+          check(html.indexOf('data-day-key="2026-09-23"')<html.indexOf('data-day-key="2026-09-02"'),'history descending');
           return count;
         }''')
         print('focused', result, 'checks passed')
@@ -108,8 +108,9 @@ try:
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto(origin + '/index.html')
+        page.get_by_role('button', name='Histórico', exact=True).click()
         page.locator('.study-history > summary').click()
-        page.locator('#study-history-date').fill('2026-09-03')
+        page.locator('#study-history-date').fill('2026-09-23')
         selected = page.locator('#study-history-selected-day')
         selected.get_by_text('Editar tempo total', exact=True).click()
         selected.locator('[name="hours"]').fill('1')

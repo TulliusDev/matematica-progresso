@@ -58,6 +58,18 @@
       }
     }
 
+    async function signInWithPassword(email, password) {
+      if (!client) throw new Error("Sincronização indisponível neste navegador.");
+      const { error } = await withTimeout(client.auth.signInWithPassword({ email, password }), AUTH_TIMEOUT);
+      if (error) throw new Error(friendlyError(error));
+    }
+
+    async function updatePassword(password) {
+      if (!client || !session) throw new Error("Entre na conta antes de criar uma senha.");
+      const { error } = await withTimeout(client.auth.updateUser({ password }), AUTH_TIMEOUT);
+      if (error) throw new Error(friendlyError(error));
+    }
+
     async function signOut() {
       const { error } = await client.auth.signOut();
       if (error) throw new Error(friendlyError(error));
@@ -181,7 +193,7 @@
       if (document.visibilityState !== "visible" || !session) return;
       pendingState ? flush() : synchronize();
     });
-    return { initialize, signIn, signOut, synchronize, queueSave, flush };
+    return { initialize, signIn, signInWithPassword, updatePassword, signOut, synchronize, queueSave, flush };
   }
 
   function getRevision(userId) {

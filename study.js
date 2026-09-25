@@ -46,6 +46,18 @@
     }
   }
 
+  function renderSessionOverview() {
+    const current = activeFlow?.current;
+    if (!current) return "";
+    const type = { base: "Base", integration: "Questões / integração", simulation: "Simulado", "simulation-review": "Correção de simulado" }[current.kind] || "Estudo";
+    return `<section class="session-current"><p class="eyebrow">${escapeHTML(type)}</p><strong>${escapeHTML(current.subjectName)}</strong><p>${escapeHTML(current.topicName || "")}</p><output data-session-clock>${formatClock(currentElapsedSeconds(current))}</output><button class="secondary-button" data-study-action="open-active">Abrir cronômetro</button></section>`;
+  }
+
+  function renderSessionChoice() {
+    if (activeFlow) return "";
+    return `<details class="session-choice"><summary>Estudar outra matéria ou tipo</summary><label>Matéria<select id="study-extra-subject">${renderSubjectOptions()}</select></label><label>Tipo<select id="study-extra-kind"><option value="base">Base</option><option value="integration" selected>Questões / integração</option></select></label><div id="study-extra-topic-field" hidden></div><button class="secondary-button" data-study-action="start-extra">Começar</button></details>`;
+  }
+
   function renderDailyRoutine(todaySchedule) {
     const study = getStudyState();
     const settings = getSettings(study);
@@ -59,7 +71,7 @@
         return `
           <section class="daily-plan weekend-plan study-weekend-plan">
             <div><p class="eyebrow">Rotina flexível de fim de semana</p><h2>Revisão ou estudo extra</h2><p>O estudo extra reduz a carga real sem tornar o fim de semana obrigatório.</p></div>
-            <div class="study-weekend-actions"><button class="secondary-button study-plan-action" type="button" data-study-action="open-review">Abrir revisão</button><label><span class="sr-only">Matéria do estudo extra</span><select id="study-extra-subject">${renderSubjectOptions()}</select></label><button class="primary-button study-plan-action" type="button" data-study-action="start-extra">Iniciar estudo extra</button></div>
+            <div class="study-weekend-actions"><button class="secondary-button study-plan-action" type="button" data-study-action="open-review">Abrir revisão</button><span>Escolha a matéria e o tipo abaixo.</span></div>
           </section>
         `;
       }
@@ -81,9 +93,9 @@
         <div class="routine-grid study-routine-grid">
           ${renderRoutineSubjectCard(context.primary, "Matéria principal")}
           <div class="study-plan-break-cue" aria-label="Intervalo de ${context.breakTargetMinutes} minutos"><span aria-hidden="true">↓</span><strong>Intervalo</strong><small>${context.breakTargetMinutes} min</small><span aria-hidden="true">↓</span></div>
-          ${renderRoutineSubjectCard(context.secondary, "Segunda matéria")}
+          ${renderRoutineSubjectCard(context.secondary, "Depois")}
         </div>
-        ${renderTodayState(context, study)}
+        <details><summary>Detalhes da rotina</summary>${renderTodayState(context, study)}</details>
         ${renderRoutineAction(context, study)}
       </section>
     `;
@@ -235,12 +247,11 @@
 
   function renderRoutineSubjectCard(descriptor, label) {
     const subject = findSubject(descriptor.subjectId);
-    const focus = safeSubjectFocus(descriptor.subjectId);
-    const topicName = focus?.topic?.name || "Trilha em dia";
+    const topicName = descriptor.topicName || (descriptor.subjectId === "matematica" ? "Questões e validação em prova" : "Sem base ativa pendente");
     return `
       <article class="study-routine-card">
         <span class="study-subject-mark" aria-hidden="true">${escapeHTML(subject?.mark || descriptor.subjectName.charAt(0) || "•")}</span>
-        <div class="study-routine-copy"><small>${escapeHTML(label)}</small><strong>${escapeHTML(descriptor.subjectName)}</strong><span>${escapeHTML(topicName)}</span></div>
+        <div class="study-routine-copy"><small>${escapeHTML(label)}</small><strong>${escapeHTML(descriptor.subjectName)}</strong>${!activeFlow && descriptor.subjectId !== "matematica" ? pendingTopicSelect(descriptor.subjectId, descriptor.topicId, "study-routine-" + descriptor.subjectId) : "<span>" + escapeHTML(topicName) + "</span>"}</div>
         <div class="study-routine-side"><span>Meta · ${descriptor.targetMinutes} min</span><button class="study-subject-link" type="button" data-study-action="navigate-subject" data-subject-id="${escapeHTML(descriptor.subjectId)}">Abrir matéria</button></div>
       </article>
     `;
@@ -424,13 +435,17 @@
       return;
     }
 
+    const primary = subjectDescriptor(sessionOne?.subjectId || primaryId, sessionOne?.targetMinutes || settings.primaryTargetMinutes, sessionOne?.subjectName);
+    const secondary = subjectDescriptor(sessionTwo?.subjectId || secondaryId, sessionTwo?.targetMinutes || settings.secondaryTargetMinutes, sessionTwo?.subjectName);
+    const starting = sessionOne?.status !== "completed" ? primary : sessionTwo?.status === "incomplete" ? secondary : null;
+    if (starting && starting.subjectId !== "matematica" && !selectDescriptorTopic(starting, "study-routine-" + starting.subjectId)) return;
     activeFlow = {
       version: ACTIVE_VERSION,
       routineId,
       dayKey,
       phase: "primary",
-      primary: subjectDescriptor(sessionOne?.subjectId || primaryId, sessionOne?.targetMinutes || settings.primaryTargetMinutes, sessionOne?.subjectName),
-      secondary: subjectDescriptor(sessionTwo?.subjectId || secondaryId, sessionTwo?.targetMinutes || settings.secondaryTargetMinutes, sessionTwo?.subjectName),
+      primary,
+      secondary,
       current: null,
       breakState: null,
       createdAt: new Date().toISOString(),
@@ -462,6 +477,8 @@
     if (!subjectId) return toast("Escolha uma matéria para o estudo extra.");
     const settings = getSettings(getStudyState());
     const descriptor = subjectDescriptor(subjectId, settings.primaryTargetMinutes);
+    const chosenKind = document.getElementById("study-extra-kind")?.value || "integration";
+    if (chosenKind === "base" && !selectDescriptorTopic(descriptor, "study-extra-topic")) return;
     const now = new Date();
     activeFlow = {
       version: ACTIVE_VERSION,
@@ -477,6 +494,12 @@
       updatedAt: now.toISOString(),
     };
     activeFlow.current = createCurrentSession(1, descriptor);
+    activeFlow.current.kind = chosenKind;
+    if (chosenKind === "integration") {
+      activeFlow.current.kind = "integration";
+      activeFlow.current.topicId = "";
+      activeFlow.current.topicName = "";
+    }
     saveActiveFlow(); dialogMode = "timer"; syncTick(); host.renderCurrentView?.(); openStudyDialog();
   }
 
@@ -516,9 +539,9 @@
       slot,
       subjectId: descriptor.subjectId,
       subjectName: descriptor.subjectName,
-      topicId: previousRecord?.topicId || descriptor.topicId || "",
-      topicName: previousRecord?.topicName || descriptor.topicName || "",
-      kind: previousRecord?.kind || "base",
+      topicId: descriptor.topicId || "",
+      topicName: descriptor.topicName || "",
+      kind: previousRecord?.kind || (descriptor.subjectId === "matematica" ? "integration" : "base"),
       simulationId: previousRecord?.simulationId || "",
       segments: Array.isArray(previousRecord?.segments) && previousRecord.segments.length
         ? previousRecord.segments.map((segment) => ({ ...segment }))
@@ -697,6 +720,7 @@
   function startSecondarySession() {
     if (!activeFlow || activeFlow.phase !== "secondary-ready") return;
     const existing = findRoutineSession(getStudyState(), activeFlow.routineId, 2);
+    if (activeFlow.secondary.subjectId !== "matematica" && !selectDescriptorTopic(activeFlow.secondary, "study-secondary-topic")) return;
     activeFlow.phase = "secondary";
     activeFlow.current = createCurrentSession(2, activeFlow.secondary, existing?.status === "incomplete" ? existing : null);
     saveActiveFlow();
@@ -844,6 +868,7 @@
       body.innerHTML = `
         <section class="study-dialog-transition">
           <div class="study-next-subject"><span aria-hidden="true">${escapeHTML(findSubject(activeFlow.secondary.subjectId)?.mark || "2")}</span><div><small>Segunda matéria</small><strong>${escapeHTML(activeFlow.secondary.subjectName)}</strong><p>Meta aproximada de ${activeFlow.secondary.targetMinutes} min.</p></div></div>
+          ${activeFlow.secondary.subjectId !== "matematica" ? pendingTopicSelect(activeFlow.secondary.subjectId, activeFlow.secondary.topicId, "study-secondary-topic") : ""}
           <button class="primary-button study-dialog-action" type="button" data-study-action="start-secondary">Iniciar segunda matéria</button>
           <button class="text-button study-cancel-link" type="button" data-study-action="request-cancel">Encerrar rotina por hoje</button>
         </section>
@@ -939,7 +964,7 @@
     const topics = host.getSubjectTopics?.(current.subjectId) || [];
     const index = topics.findIndex((topic) => topic.id === topicId);
     if (index < 0) return;
-    const next = topics.slice(index + 1).find((topic) => ["not-started", "studying"].includes(host.getState?.()?.topics?.[topic.id]?.status));
+    const next = topics.slice(index + 1).find((topic) => topic.planActive !== false && ["not-started", "studying"].includes(host.getState?.()?.topics?.[topic.id]?.status));
     changeCurrentTopic(next?.id || "", next?.name || "");
     if (isStudyDialogOpen()) renderStudyDialog();
   }
@@ -981,6 +1006,7 @@
     });
     body?.addEventListener("change", (event) => {
       if (event.target.id !== "study-session-topic" || !activeFlow?.current) return;
+      if (!pendingBaseTopics(activeFlow.current.subjectId).some(topic => topic.id === event.target.value)) return;
       const selected = event.target.selectedOptions[0];
       changeCurrentTopic(event.target.value, selected?.dataset.topicName || "");
       toast(activeFlow.current.topicId ? `Tempo vinculado a ${activeFlow.current.topicName}.` : "Sessão sem tópico específico.");
@@ -990,6 +1016,7 @@
   function bindLifecycleEvents() {
     if (initialized) return;
     document.addEventListener("change", (event) => {
+      if (["study-extra-subject", "study-extra-kind"].includes(event.target.id)) { updateExtraTopicChoice(event.target.id === "study-extra-subject"); return; }
       if (event.target.id !== "study-history-date" || !event.target.value || !event.target.reportValidity()) return;
       document.getElementById("study-history-selected-day").innerHTML = renderHistoryDay(summarizeDay(event.target.value, getStudyState()), getStudyState(), false);
     });
@@ -1044,6 +1071,7 @@
     if (activeFlow.current) {
       const seconds = currentElapsedSeconds(activeFlow.current);
       const clock = activeFlow.phase === "simulation" ? formatCountdown(simulationRemainingSeconds(activeFlow.current)) : formatClock(seconds);
+      document.querySelectorAll("[data-session-clock]").forEach((element) => { element.textContent = clock; });
       const duration = formatStudyDuration(seconds);
       const targetText = renderTargetText(seconds, activeFlow.current.targetMinutes);
       const timer = document.getElementById("study-session-timer");
@@ -1236,10 +1264,12 @@
   }
 
   function getSettings(study) {
+    const month = localDayKey(new Date()).slice(0, 7);
+    const blocks = window.TRAJETORIA_PLANNING_CONFIG?.dailyBlocksMinutes?.[month];
     return {
-      primaryTargetMinutes: clampInteger(study.settings?.primaryTargetMinutes, 1, 360, DEFAULT_SETTINGS.primaryTargetMinutes),
+      primaryTargetMinutes: blocks?.[0] ?? clampInteger(study.settings?.primaryTargetMinutes, 1, 360, DEFAULT_SETTINGS.primaryTargetMinutes),
       breakMinutes: clampInteger(study.settings?.breakMinutes, 1, 120, DEFAULT_SETTINGS.breakMinutes),
-      secondaryTargetMinutes: clampInteger(study.settings?.secondaryTargetMinutes, 1, 360, DEFAULT_SETTINGS.secondaryTargetMinutes),
+      secondaryTargetMinutes: blocks?.[1] ?? clampInteger(study.settings?.secondaryTargetMinutes, 1, 360, DEFAULT_SETTINGS.secondaryTargetMinutes),
     };
   }
 
@@ -1382,25 +1412,56 @@
 
   function subjectDescriptor(subjectId, targetMinutes, nameOverride = "", topicIdOverride = "", topicNameOverride = "") {
     const id = String(subjectId || "").slice(0, 100);
-    const topics = host.getSubjectTopics?.(id) || [];
+    const topics = (host.getSubjectTopics?.(id) || []).filter((topic) => topic.planActive !== false);
     const focus = topics.find((topic) => host.getState?.()?.topics?.[topic.id]?.status === "studying")
       || topics.find((topic) => host.getState?.()?.topics?.[topic.id]?.status === "not-started")
-      || safeSubjectFocus(id)?.topic
       || null;
     return {
       subjectId: id,
-      subjectName: String(nameOverride || subjectName(id)).slice(0, 140),
+      subjectName: String(nameOverride || (id === "matematica" ? "Matemática — questões" : subjectName(id))).slice(0, 140),
       targetMinutes: clampInteger(targetMinutes, 1, 360, DEFAULT_SETTINGS.primaryTargetMinutes),
       topicId: String(topicIdOverride || focus?.id || "").slice(0, 160),
       topicName: String(topicNameOverride || focus?.name || "").slice(0, 180),
     };
   }
 
+  function pendingBaseTopics(subjectId) {
+    const states = host.getState?.()?.topics || {};
+    return (host.getSubjectTopics?.(subjectId) || []).filter(topic =>
+      topic.planActive !== false && ["studying", "not-started"].includes(states[topic.id]?.status || "not-started"));
+  }
+
+  function pendingTopicSelect(subjectId, selectedId, id, active = false) {
+    const topics = pendingBaseTopics(subjectId);
+    const selected = topics.some(topic => topic.id === selectedId) ? selectedId
+      : active ? "" : (topics.find(topic => host.getState?.()?.topics?.[topic.id]?.status === "studying") || topics[0])?.id || "";
+    const empty = active ? "Nenhum tópico pendente" : "Nenhum tópico de base pendente";
+    return `<label class="study-topic-select"><span>Tópico</span><select id="${escapeHTML(id)}" ${!topics.length ? "disabled" : ""}>
+      ${!selected ? `<option value="" selected disabled>${empty}</option>` : ""}
+      ${topics.map(topic => `<option value="${escapeHTML(topic.id)}" data-topic-name="${escapeHTML(topic.name)}" ${topic.id === selected ? "selected" : ""}>${escapeHTML(topic.name)}</option>`).join("")}
+    </select></label>`;
+  }
+
+  function selectDescriptorTopic(descriptor, selectId) {
+    const topic = pendingBaseTopics(descriptor.subjectId).find(topic => topic.id === document.getElementById(selectId)?.value);
+    if (!topic) { toast("Nenhum tópico de base pendente. Escolha Questões / integração."); return false; }
+    descriptor.topicId = topic.id; descriptor.topicName = topic.name;
+    return true;
+  }
+
+  function updateExtraTopicChoice(subjectChanged) {
+    const subjectId = document.getElementById("study-extra-subject")?.value;
+    const kind = document.getElementById("study-extra-kind");
+    const field = document.getElementById("study-extra-topic-field");
+    if (!kind || !field) return;
+    if (subjectChanged) kind.value = subjectId === "matematica" ? "integration" : "base";
+    field.hidden = kind.value !== "base";
+    field.innerHTML = field.hidden ? "" : pendingTopicSelect(subjectId, "", "study-extra-topic");
+    document.querySelector('[data-study-action="start-extra"]').disabled = !field.hidden && !pendingBaseTopics(subjectId).length;
+  }
+
   function renderTopicSelector(current) {
-    const topics = host.getSubjectTopics?.(current.subjectId) || [];
-    if (!topics.length) return "";
-    const options = topics.map((topic) => `<option value="${escapeHTML(topic.id)}" data-topic-name="${escapeHTML(topic.name)}" ${topic.id === current.topicId ? "selected" : ""}>${escapeHTML(topic.name)}</option>`).join("");
-    return `<label class="study-topic-select" for="study-session-topic"><span>Conteúdo desta sessão</span><select id="study-session-topic"><option value="">Sem tópico específico</option>${options}</select><small>O tempo real alimenta o saldo e a comparação com a estimativa.</small></label>`;
+    return pendingTopicSelect(current.subjectId, current.topicId, "study-session-topic", true);
   }
 
   function findSubject(subjectId) {
@@ -1542,6 +1603,8 @@
     ACTIVE_STORAGE_KEY,
     initialize,
     renderDailyRoutine,
+    renderSessionOverview,
+    renderSessionChoice,
     renderConsistencySection,
     handleAction,
     applyExternalState,

@@ -6,7 +6,7 @@
   "planName": "Trajetória — CEFET-MG 2027",
   "timezone": "America/Sao_Paulo",
   "dates": {
-    "planStartDate": "2026-09-03",
+    "planStartDate": "2026-09-23",
     "lastRegularStudyDate": "2026-11-27",
     "examDate": "2026-11-29"
   },
@@ -23,65 +23,62 @@
   },
   "dailyTargetsMinutes": {
     "2026-09": 90,
-    "2026-10": 150,
-    "2026-11": 180
+    "2026-10": 165,
+    "2026-11": 195
   },
   "regularWeekdayCounts": {
-    "2026-09": 20,
+    "2026-09": 6,
     "2026-10": 22,
     "2026-11": 20
   },
   "capacity": {
-    "regularCapacityMinutes": 8700,
-    "regularCapacityHours": 145,
+    "regularCapacityMinutes": 8070,
+    "regularCapacityHours": 134.5,
     "simulationExtraCapacityMinutes": 720,
-    "totalCapacityIncludingSimulationsMinutes": 9420,
-    "totalCapacityIncludingSimulationsHours": 157
+    "totalCapacityIncludingSimulationsMinutes": 8790,
+    "totalCapacityIncludingSimulationsHours": 146.5
   },
   "workload": {
-    "existingWeightedTopicsCount": 171,
-    "existingWeightedTopicsMinutes": 6210,
-    "existingWeightedTopicsHours": 103.5,
-    "requiredLiteratureMinutes": 180,
-    "baseBudgetTotalMinutes": 6390,
-    "baseBudgetTotalHours": 106.5,
-    "integrationReserveMinutes": 1440,
-    "integrationReserveHours": 24,
+    "requiredLiteratureMinutes": 90,
+    "baseBudgetTotalMinutes": 4320,
+    "baseBudgetTotalHours": 72,
+    "integrationReserveMinutes": 2910,
+    "integrationReserveHours": 48.5,
     "simulationReviewReserveMinutes": 240,
     "simulationReviewReserveHours": 4,
     "simulationPlanMinutes": 720,
     "simulationPlanHours": 12,
-    "plannedRegularWorkMinutes": 8070,
-    "plannedRegularWorkHours": 134.5,
-    "plannedWorkIncludingSimulationsMinutes": 8790,
-    "plannedWorkIncludingSimulationsHours": 146.5,
-    "initialMarginMinutes": 630,
-    "initialMarginHours": 10.5
+    "plannedRegularWorkMinutes": 7470,
+    "plannedRegularWorkHours": 124.5,
+    "plannedWorkIncludingSimulationsMinutes": 8190,
+    "plannedWorkIncludingSimulationsHours": 136.5,
+    "initialMarginMinutes": 600,
+    "initialMarginHours": 10
   },
   "phaseGuides": {
     "2026-09": {
-      "regularMinutes": 1800,
-      "baseGuideMinutes": 1680,
-      "integrationGuideMinutes": 120,
+      "regularMinutes": 540,
+      "baseGuideMinutes": 360,
+      "integrationGuideMinutes": 180,
       "simulationReviewGuideMinutes": 0,
       "marginGuideMinutes": 0,
-      "note": "Prioridade quase total para construção de base."
+      "note": "Referência de fase, sem travar a distribuição do estudo."
     },
     "2026-10": {
-      "regularMinutes": 3300,
-      "baseGuideMinutes": 2820,
-      "integrationGuideMinutes": 420,
+      "regularMinutes": 3630,
+      "baseGuideMinutes": 2340,
+      "integrationGuideMinutes": 1050,
       "simulationReviewGuideMinutes": 60,
-      "marginGuideMinutes": 0,
-      "note": "Base ainda dominante, com integração crescente e primeiro simulado."
+      "marginGuideMinutes": 180,
+      "note": "Referência de fase, sem travar a distribuição do estudo."
     },
     "2026-11": {
-      "regularMinutes": 3600,
-      "baseGuideMinutes": 1890,
-      "integrationGuideMinutes": 900,
+      "regularMinutes": 3900,
+      "baseGuideMinutes": 1620,
+      "integrationGuideMinutes": 1680,
       "simulationReviewGuideMinutes": 180,
-      "marginGuideMinutes": 630,
-      "note": "Fechar a base aproximadamente até a metade do mês; depois priorizar prova, revisão e correção."
+      "marginGuideMinutes": 420,
+      "note": "Referência de fase, sem travar a distribuição do estudo."
     }
   },
   "requiredLiterature": {
@@ -89,8 +86,9 @@
     "bloco": "Literatura",
     "topico": "O Alienista — leitura obrigatória",
     "estadoInicial": "não iniciado",
-    "budgetMinutes": 180,
-    "softTargetMonth": "2026-09"
+    "budgetMinutes": 90,
+    "softTargetMonth": "2026-09",
+    "objective": "Estudo ativo: enredo, personagens, ironia/sátira, temas e questões. Obra já lida; sem nova leitura integral."
   },
   "simulationPlan": [
     {
@@ -128,7 +126,7 @@
   ],
   "marginRules": {
     "description": "A margem não gera replanejamento automático. Ela combina aderência ao calendário, eficiência real dos tópicos e estouro de reservas.",
-    "initialMarginMinutes": 630,
+    "initialMarginMinutes": 600,
     "dailyDelta": {
       "pastRegularWeekday": "actualRegularMinutes - targetMinutes",
       "today": "max(0, actualRegularMinutes - targetMinutes)",
@@ -142,10 +140,10 @@
       "incompleteOverBudget": "budgetMinutes - actualTrackedMinutes"
     },
     "reserveOverrun": {
-      "integration": "-max(0, actualIntegrationMinutes - 1440)",
+      "integration": "-max(0, actualIntegrationMinutes - 2910)",
       "simulationReview": "-max(0, actualSimulationReviewMinutes - 240)"
     },
-    "currentMarginFormula": "630 + sum(dailyDelta) + sum(topicDelta) - max(0, integrationMinutes - 1440) - max(0, simulationReviewMinutes - 240)",
+    "currentMarginFormula": "600 + sum(dailyDelta) + sum(topicDelta) - max(0, integrationMinutes - 2910) - max(0, simulationReviewMinutes - 240)",
     "statusThresholds": {
       "above180": "Plano cabe",
       "from0to180": "Margem curta",
@@ -1350,7 +1348,106 @@
       "estado": "não iniciado",
       "peso_minutos_base": 30
     }
-  ]
+  ],
+  "activeTopicIds": {
+    "matematica": [],
+    "historia": [
+      "his-roma",
+      "his-feudalismo",
+      "his-renascimento",
+      "his-reformas-religiosas",
+      "his-absolutismo",
+      "his-mercantilismo",
+      "his-expansao-maritima",
+      "his-iluminismo",
+      "his-revolucao-industrial",
+      "his-revolucao-francesa",
+      "his-imperialismo",
+      "his-primeira-guerra",
+      "his-revolucao-russa",
+      "his-crise-1929",
+      "his-fascismo-nazismo",
+      "his-segunda-guerra",
+      "his-guerra-fria",
+      "his-colonizacao-portuguesa",
+      "his-acucar-escravidao",
+      "his-independencia-brasil",
+      "his-segundo-reinado",
+      "his-abolicao",
+      "his-republica-oligarquica",
+      "his-era-vargas",
+      "his-ditadura-militar",
+      "his-redemocratizacao"
+    ],
+    "geografia": [
+      "geo-latitude-longitude",
+      "geo-coordenadas",
+      "geo-escalas",
+      "geo-fusos",
+      "geo-placas-tectonicas",
+      "geo-relevo",
+      "geo-tempo-clima",
+      "geo-climas-brasileiros",
+      "geo-hidrografia",
+      "geo-biomas-brasileiros",
+      "geo-densidade",
+      "geo-crescimento-populacional",
+      "geo-migracoes",
+      "geo-piramides-etarias",
+      "geo-urbanizacao",
+      "geo-industrializacao",
+      "geo-fontes-energia",
+      "geo-regionalizacao-brasileira",
+      "geo-regioes-brasil",
+      "geo-industrializacao-brasileira",
+      "geo-urbanizacao-brasileira",
+      "geo-agropecuaria-brasileira",
+      "geo-desigualdades-regionais",
+      "geo-globalizacao",
+      "geo-capitalismo",
+      "geo-blocos-economicos",
+      "geo-desenvolvimento",
+      "geo-geopolitica",
+      "geo-migracoes-internacionais",
+      "geo-problemas-ambientais"
+    ]
+  },
+  "dailyBlocksMinutes": {
+    "2026-09": [
+      60,
+      30
+    ],
+    "2026-10": [
+      105,
+      60
+    ],
+    "2026-11": [
+      120,
+      75
+    ]
+  },
+  "stateRebase": {
+    "version": "2026-09-22",
+    "consolidatedSubjects": [
+      "matematica"
+    ],
+    "consolidatedTopicIds": [
+      "cie-materia-corpo-objeto",
+      "cie-estados-fisicos",
+      "cie-mudancas-estado",
+      "cie-propriedades-materia",
+      "cie-substancias-misturas",
+      "cie-separacao-misturas"
+    ],
+    "correctHistoryTopicIds": [
+      "his-o-que-e",
+      "his-fontes",
+      "his-tempo",
+      "his-pre-historia",
+      "his-mesopotamia",
+      "his-egito",
+      "his-grecia"
+    ]
+  }
 };
 })();
-

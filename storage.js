@@ -97,7 +97,7 @@
       topics[topic.id] = createTopicState(topic, masteredIndex);
       if (topic.initialStatus === "mastered") masteredIndex += 1;
     });
-    return {
+    const state = {
       version: APP_VERSION,
       topics,
       activities: [],
@@ -114,6 +114,8 @@
         staleReviewDays: 21,
       },
     };
+    applyPlanRebase(state);
+    return state;
   }
 
   function createDefaultPlanningState() {
@@ -134,7 +136,7 @@
       const current = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (current?.version === APP_VERSION && current.topics) {
         const normalized = normalizeState(current);
-        if (repairHistoricalTopicStatuses(normalized)) saveState(normalized);
+        if (repairHistoricalTopicStatuses(normalized) || JSON.stringify(current) !== JSON.stringify(normalized)) saveState(normalized);
         return normalized;
       }
 
@@ -154,7 +156,7 @@
     } catch (error) {
       console.warn("Não foi possível restaurar os dados salvos.", error);
     }
-    const initial = createDefaultState();
+    const initial = normalizeState(createDefaultState());
     saveState(initial);
     return initial;
   }
@@ -244,7 +246,27 @@
     allTopics.forEach((topic) => {
       normalized.topics[topic.id] = normalizeTopicState(candidate.topics?.[topic.id], defaults.topics[topic.id]);
     });
+    applyPlanRebase(normalized);
     return normalized;
+  }
+
+  function applyPlanRebase(state) {
+    const rebase = window.TRAJETORIA_PLANNING_CONFIG?.stateRebase;
+    if (!rebase) return;
+    const corrections = new Set(rebase.correctHistoryTopicIds);
+    allTopics.forEach((topic) => {
+      const item = state.topics[topic.id];
+      if (item.planRebaseVersion === rebase.version) return;
+      const correctHistory = corrections.has(topic.id);
+      const consolidate = rebase.consolidatedSubjects.includes(topic.subject.id) || rebase.consolidatedTopicIds.includes(topic.id);
+      if (correctHistory || (consolidate && !["consolidating", "mastered"].includes(item.status))) {
+        item.status = "consolidating";
+        item.masteredAt = null;
+        item.review.nextAt = null;
+        item.updatedAt = new Date().toISOString();
+      }
+      item.planRebaseVersion = rebase.version;
+    });
   }
 
   function repairHistoricalTopicStatuses(state) {

@@ -318,6 +318,7 @@
   ]));
   subjects.forEach((subject) => subject.blocks.forEach((currentBlock) => currentBlock.topics.forEach((currentTopic) => {
     const budget = topicBudgets.get(`${subject.name}\u0000${currentBlock.name}\u0000${currentTopic.name}`);
+    currentTopic.planActive = !planningConfig?.activeTopicIds?.[subject.id] || planningConfig.activeTopicIds[subject.id].includes(currentTopic.id);
     if (budget !== undefined) currentTopic.budgetMinutes = budget;
   })));
   const requiredLiterature = planningConfig?.requiredLiterature;
@@ -328,13 +329,21 @@
 
   const schedule = {
     0: { type: "weekly-review", label: "Revisão semanal flexível" },
-    1: { primary: { subjectId: "matematica" }, secondary: { subjectId: "historia" } },
-    2: { primary: { subjectId: "ciencias" }, secondary: { subjectId: "matematica" } },
-    3: { primary: { subjectId: "matematica" }, secondary: { subjectId: "geografia" } },
-    4: { primary: { subjectId: "historia" }, secondary: { subjectId: "matematica" } },
-    5: { primary: { subjectId: "matematica" }, secondary: { subjectId: "portugues" } },
+    1: { primary: { subjectId: "portugues" }, secondary: { subjectId: "matematica" } },
+    2: { primary: { subjectId: "ciencias" }, secondary: { subjectId: "historia" } },
+    3: { primary: { subjectId: "portugues" }, secondary: { subjectId: "matematica" } },
+    4: { primary: { subjectId: "ciencias" }, secondary: { subjectId: "geografia" } },
+    5: { primary: { subjectId: "historia" }, secondary: { subjectId: "matematica" } },
     6: { type: "weekly-review", label: "Revisão semanal flexível" },
   };
 
-  window.TRAJETORIA_DATA = { subjects, schedule };
+  function scheduleForDate(date = new Date()) {
+    const entry = schedule[date.getDay()];
+    if (date.getDay() !== 5) return entry;
+    const thursday = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
+    const week = Math.ceil((((thursday - new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1))) / 86400000) + 1) / 7);
+    return { primary: { subjectId: week % 2 ? "historia" : "geografia" }, secondary: { subjectId: "matematica" } };
+  }
+  window.TRAJETORIA_DATA = { subjects, schedule, scheduleForDate };
 })();

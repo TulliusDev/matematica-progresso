@@ -5,11 +5,11 @@
   const EFFORT_LABELS = Object.freeze({ small: "Pequeno", normal: "Normal", large: "Grande", "very-large": "Muito grande" });
   const DEFAULT_CONFIG = Object.freeze({
     examDate: "2026-11-29",
-    planStartDate: "2026-09-03",
+    planStartDate: "2026-09-23",
     lastRegularStudyDate: "2026-11-27",
-    dailyTargetsMinutes: { "2026-09": 90, "2026-10": 150, "2026-11": 180 },
-    initialMarginMinutes: 630,
-    integrationReserveMinutes: 1440,
+    dailyTargetsMinutes: { "2026-09": 90, "2026-10": 165, "2026-11": 195 },
+    initialMarginMinutes: 600,
+    integrationReserveMinutes: 2910,
     simulationReviewReserveMinutes: 240,
     safetyBufferPercent: 10,
     regularWeekdays: [1, 2, 3, 4, 5],
@@ -45,14 +45,15 @@
         effort,
         effortSize: null,
         used,
-        remaining: baseReady ? 0 : effort,
+        planActive: topic.planActive !== false,
+        remaining: baseReady || topic.planActive === false ? 0 : effort,
         variance: used - effort,
         baseReady,
         validated: topicState.status === "mastered",
       };
     });
     const remainingLoadMinutes = sum(topicRows.map((row) => row.remaining));
-    const baseRemaining = topicRows.filter((row) => !row.baseReady);
+    const baseRemaining = topicRows.filter((row) => row.planActive && !row.baseReady);
     const integrationQueue = topicRows.filter((row) => row.status === "consolidating");
     const validated = topicRows.filter((row) => row.validated);
     const overEstimate = topicRows.filter((row) => row.used > 0 && row.variance > 0).sort((a, b) => b.variance - a.variance);
@@ -119,7 +120,7 @@
   }
 
   function calculateMargin(state, topics, today, planStart, lastRegularStudy, weekdays, config) {
-    const sessions = state.study?.sessions || [];
+    const sessions = (state.study?.sessions || []).filter((session) => session.dayKey >= localDayKey(planStart));
     const start = planStart.getTime() ? planStart : dateFromDayKey(DEFAULT_CONFIG.planStartDate);
     const end = lastRegularStudy.getTime() ? lastRegularStudy : dateFromDayKey(DEFAULT_CONFIG.lastRegularStudyDate);
     let dailyDelta = 0;
@@ -132,6 +133,7 @@
     const topicMinutes = minutesByTopic(sessions);
     let topicDelta = 0;
     topics.forEach((topic) => {
+      if (topic.planActive === false) return;
       const actual = topicMinutes[topic.id] || 0;
       const budget = Math.max(0, Number(topic.budgetMinutes) || 0);
       const status = state.topics?.[topic.id]?.status;
@@ -190,7 +192,7 @@
     rows.forEach((row) => {
       const group = groups.get(row.subjectId) || { subjectId: row.subjectId, subjectName: row.subjectName, remainingMinutes: 0, baseRemaining: 0, integrationPending: 0 };
       group.remainingMinutes += row.remaining;
-      if (!row.baseReady) group.baseRemaining += 1;
+      if (row.planActive && !row.baseReady) group.baseRemaining += 1;
       if (row.status === "consolidating") group.integrationPending += 1;
       groups.set(row.subjectId, group);
     });

@@ -1,11 +1,12 @@
 (() => {
   "use strict";
 
-  const { subjects, schedule } = window.TRAJETORIA_DATA;
+  const { subjects, schedule, scheduleForDate } = window.TRAJETORIA_DATA;
   const Storage = window.TrajetoriaStorage;
   const Continuous = window.TrajetoriaContinuous;
   const Study = window.TrajetoriaStudy;
   const Planning = window.TrajetoriaPlanning;
+  const SHOW_CONTINUOUS = false;
   const continuousTrails = window.TRAJETORIA_CONTINUOUS.trails;
   const { allTopics, DAY_MS } = Storage;
   const STATUS_WEIGHT = { "not-started": 0, studying: 0.34, consolidating: 0.67, mastered: 1 };
@@ -106,6 +107,7 @@
   }
 
   function renderContinuousNavigation() {
+    document.querySelectorAll("[data-continuous-nav]").forEach((element) => { element.hidden = !SHOW_CONTINUOUS; });
     elements.continuousNavigation.innerHTML = continuousTrails.map((trail) => `
       <button class="nav-item continuous-nav-item" type="button" data-view="trail" data-trail-id="${trail.id}">
         <span class="nav-icon" aria-hidden="true">${trail.icon}</span><span>${escapeHTML(trail.name)}</span>
@@ -135,7 +137,7 @@
         activeView = "trail";
         activeTrailId = trailId;
       }
-    } else if (["literatura", "errors", "review", "exams", "continuous"].includes(path)) {
+    } else if (["literatura", "errors", "review", "exams", "continuous", "curriculum", "history"].includes(path)) {
       activeView = path;
     } else {
       activeView = "home";
@@ -166,44 +168,23 @@
     else if (activeView === "errors") renderErrorsPage();
     else if (activeView === "review") renderWeeklyReviewPage();
     else if (activeView === "exams") renderExamsPage();
+    else if (activeView === "curriculum") elements.mainContent.innerHTML = `<section class="page-intro"><h1>Currículo</h1></section><div class="subject-progress-grid">${subjects.map(renderSubjectProgressCard).join("")}</div><details><summary>Análise e planejamento</summary>${renderPlanningPanel()}</details>`;
+    else if (activeView === "history") elements.mainContent.innerHTML = Study.renderConsistencySection();
     else renderHomePage();
     updateActiveNavigation();
     updateNavigationBadges();
   }
 
   function renderHomePage() {
-    const stats = getOverallStats();
     const today = new Date();
-    const todaySchedule = schedule[today.getDay()];
-    const focus = getGlobalFocus(todaySchedule);
-    const dateLabel = capitalize(today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" }));
-
+    const plan = Planning.calculate(state, allTopics);
     elements.mainContent.innerHTML = `
-      <section class="page-intro home-intro">
-        <div><p class="eyebrow">${escapeHTML(dateLabel)}</p><h1>Minha Formação</h1><p class="intro-copy">Uma visão clara da prioridade acadêmica atual e dos caminhos que continuam por toda a vida.</p></div>
-        ${renderLastActivity()}
-      </section>
-      <section class="home-priority"><div><p class="eyebrow">Objetivo atual · prioridade acadêmica</p><h2>CEFET / COLTEC</h2><p>O painel de preparação continua sendo o foco principal desta fase.</p></div><span>O que estudar agora?</span></section>
-      ${renderPlanningPanel()}
-      ${renderDailyRoutine(todaySchedule)}
-      ${Study.renderConsistencySection()}
-      ${renderFocusCard(focus, "Foco recomendado agora")}
-      <section class="overview home-overview" aria-label="Resumo geral">
-        <div class="progress-feature">
-          <div class="progress-ring" style="--progress:${stats.progress * 3.6}deg"><span>${stats.progress}%</span></div>
-          <div class="progress-copy"><p class="stat-label">Progresso da preparação</p><p class="progress-message">${getOverallMessage(stats)}</p><div class="progress-track progress-track-large" role="progressbar" aria-label="Progresso geral" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stats.progress}"><span style="width:${stats.progress}%"></span></div></div>
-        </div>
-        ${renderStatCard("✓", stats.mastered, `de ${stats.total}`, "Consolidados em prova", "check-icon")}
-        ${renderStatCard("◐", stats.active, "em andamento", "Estudando", "blocks-icon")}
-        ${renderStatCard("↻", stats.due, "pendentes", "Revisões", stats.due ? "review-icon has-value" : "review-icon")}
-        ${renderStatCard("!", stats.openErrors, "não revisados", "Erros", stats.openErrors ? "error-icon has-value" : "error-icon")}
-      </section>
-      <section class="dashboard-section">
-        <div class="section-heading"><div><p class="eyebrow">Visão por matéria</p><h2>Seu avanço</h2></div></div>
-        <div class="subject-progress-grid">${subjects.map(renderSubjectProgressCard).join("")}</div>
-      </section>
-      ${Continuous.renderHomeSection()}
-      ${renderRecentActivitySection()}
+      <section class="page-intro home-intro"><div><p class="eyebrow">${escapeHTML(today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" }))}</p><h1>Hoje · ${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</h1></div></section>
+      ${renderDailyRoutine(scheduleForDate(today))}
+      ${Study.renderSessionOverview()}
+      ${Study.renderSessionChoice()}
+      <section class="session-plan-summary" aria-label="Plano"><div><span>Margem (após base, questões e correção)</span><strong>${formatSignedMinutes(plan.margin.currentMarginMinutes)}</strong></div><div><span>Base restante</span><strong>${formatMinutes(plan.remainingLoadMinutes)}</strong></div><div><span>Próximo simulado</span><strong>${escapeHTML(nextSimulationLabel())}</strong></div></section>
+      <nav class="session-shortcuts" aria-label="Atalhos"><button class="text-button" data-action="navigate" data-view-target="curriculum">Currículo</button><button class="text-button" data-action="navigate" data-view-target="history">Histórico</button><button class="text-button" data-action="navigate" data-view-target="exams">Simulados</button><button class="text-button" data-action="open-settings">Configurações</button></nav>
     `;
   }
 
@@ -220,13 +201,13 @@
         <div class="planning-summary-grid">
           <div><span>Meta de hoje</span><strong>${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</strong></div>
           <div><span>Carga-base restante</span><strong>${formatMinutes(plan.remainingLoadMinutes)}</strong></div>
-          <div><span>Margem</span><strong>${formatSignedMinutes(plan.margin.currentMarginMinutes)}</strong></div>
+          <div><span>Margem (após base, questões e correção)</span><strong>${formatSignedMinutes(plan.margin.currentMarginMinutes)}</strong></div>
           <div><span>Próximo simulado</span><strong>${escapeHTML(nextSimulationLabel())}</strong></div>
         </div>
         ${renderPlanningHighlights()}
         <details class="planning-details"><summary>Ver planejamento</summary>
           <div class="planning-detail-grid">
-            <section><h3>Reservas e aderência</h3><dl><div><dt>Meta de hoje</dt><dd>${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</dd></div><div><dt>Aderência acumulada</dt><dd>${formatSignedMinutes(plan.margin.dailyDeltaMinutes)}</dd></div><div><dt>Integração</dt><dd>${formatMinutes(plan.integrationMinutes)} / 24h</dd></div><div><dt>Correção de simulados</dt><dd>${formatMinutes(plan.simulationReviewMinutes)} / 4h</dd></div></dl></section>
+            <section><h3>Reservas e aderência</h3><dl><div><dt>Meta de hoje</dt><dd>${formatMinutes(plan.todayStudyMinutes)} / ${formatMinutes(plan.dailyMinutes)}</dd></div><div><dt>Aderência acumulada</dt><dd>${formatSignedMinutes(plan.margin.dailyDeltaMinutes)}</dd></div><div><dt>Integração</dt><dd>${formatMinutes(plan.integrationMinutes)} / ${formatMinutes(window.TRAJETORIA_PLANNING_CONFIG.workload.integrationReserveMinutes)}</dd></div><div><dt>Correção de simulados</dt><dd>${formatMinutes(plan.simulationReviewMinutes)} / 4h</dd></div></dl></section>
             <section><h3>Construção da base</h3><p><strong>${plan.baseRemaining.length}</strong> conteúdos ainda precisam chegar a Base consolidada.</p><div class="planning-subject-loads">${plan.bySubject.map((subject) => `<div><span>${escapeHTML(subject.subjectName)}</span><strong>${formatMinutes(subject.remainingMinutes)}</strong></div>`).join("")}</div></section>
             <section><h3>Bases prontas para testar em prova</h3><p>Inclua aos poucos em questões mistas, testes ou provas anteriores.</p>${plan.integrationQueue.length ? `<ul class="planning-topic-list">${plan.integrationQueue.map((topic) => `<li><span>${escapeHTML(topic.name)}</span><small>${escapeHTML(topic.subjectName)}</small></li>`).join("")}</ul>` : '<p class="planning-empty">Nenhuma base aguardando validação no momento.</p>'}<p class="planning-validation-count">${plan.validated.length} conteúdos já consolidados em prova.</p></section>
             <section><h3>Tempo real × estimativa</h3>${renderPlanningVariance(plan)}${plan.subjectInsights.length ? `<div class="planning-insights">${plan.subjectInsights.map((item) => `<p>${escapeHTML(item.message)}</p>`).join("")}</div>` : ""}</section>
@@ -287,7 +268,7 @@
     return `
       <div class="planning-highlights">
         <div class="planning-highlight-row"><span>Meta diária</span><strong>${dailyTarget ? formatMinutes(dailyTarget) : "0 min"}</strong></div>
-        <div class="planning-highlight-row"><span>Integração</span><strong>${formatMinutes(Planning.calculate(state, allTopics).integrationMinutes)} / 24h</strong></div>
+        <div class="planning-highlight-row"><span>Integração</span><strong>${formatMinutes(Planning.calculate(state, allTopics).integrationMinutes)} / ${formatMinutes(window.TRAJETORIA_PLANNING_CONFIG.workload.integrationReserveMinutes)}</strong></div>
         <div class="planning-highlight-row"><span>Correção</span><strong>${formatMinutes(Planning.calculate(state, allTopics).simulationReviewMinutes)} / 4h</strong></div>
         <div class="planning-highlight-row"><span>Simulados realizados</span><strong>${(state.simulations || []).filter((simulation) => simulation.status !== "planned").length} / 4</strong></div>
         <div class="planning-highlight-row"><span>${escapeHTML(simulationText)}</span></div>
@@ -300,7 +281,7 @@
   function nextSimulationLabel() {
     const config = window.TRAJETORIA_PLANNING_CONFIG;
     const todayKey = Planning.localDayKey(new Date());
-    const simulation = config?.simulationPlan?.find((item) => todayKey < item.windowStart) || config?.simulationPlan?.find((item) => todayKey >= item.windowStart && todayKey <= item.windowEnd);
+    const simulation = config?.simulationPlan?.find((item) => todayKey >= item.windowStart && todayKey <= item.windowEnd) || config?.simulationPlan?.find((item) => todayKey < item.windowStart);
     return simulation ? `${formatPlanningDate(simulation.preferredDate)} · ${formatMinutes(simulation.durationMinutes)}` : "Concluídos";
   }
 
@@ -402,7 +383,7 @@
     return `
       <li class="topic-item ${statusClass} ${focusTopicId === topic.id ? "recommended" : ""}" id="topic-${topic.id}">
         <button class="quick-state" type="button" data-action="quick-topic" data-topic-id="${topic.id}" aria-label="${topicState.status === "mastered" ? "Mover para Base consolidada" : topicState.status === "consolidating" ? "Marcar como Consolidado em prova" : "Marcar Base consolidada"}"><span aria-hidden="true">${due ? "↻" : topicState.status === "mastered" ? "✓" : topicState.status === "consolidating" ? "◐" : ""}</span></button>
-        <button class="topic-open" type="button" data-action="open-topic" data-topic-id="${topic.id}"><span class="topic-main"><span class="topic-name">${escapeHTML(topic.name)}</span><span class="topic-evidence">${evidence.length ? evidence.join(" · ") : "Sem evidências registradas"}</span></span><span class="topic-meta">${topic.budgetMinutes ? `<span class="topic-budget">Prev. ${formatMinutes(topic.budgetMinutes)}${used ? ` · estudado ${formatMinutes(used)}` : ""}</span>` : ""}${focusTopicId === topic.id ? '<span class="recommended-label">Foco</span>' : ""}<span class="topic-status">${due ? "Revisar" : STATUS_LABEL[topicState.status]}</span><span class="topic-arrow" aria-hidden="true">→</span></span></button>
+        <button class="topic-open" type="button" data-action="open-topic" data-topic-id="${topic.id}"><span class="topic-main"><span class="topic-name">${escapeHTML(topic.name)}</span>${topic.id === "pt-o-alienista" ? `<small>${escapeHTML(window.TRAJETORIA_PLANNING_CONFIG.requiredLiterature.objective)}</small>` : ""}${topic.planActive === false ? '<small class="outside-plan">Fora do plano atual</small>' : ""}<span class="topic-evidence">${evidence.length ? evidence.join(" · ") : "Sem evidências registradas"}</span></span><span class="topic-meta">${topic.budgetMinutes ? `<span class="topic-budget">Prev. ${formatMinutes(topic.budgetMinutes)}${used ? ` · estudado ${formatMinutes(used)}` : ""}</span>` : ""}${focusTopicId === topic.id ? '<span class="recommended-label">Foco</span>' : ""}<span class="topic-status">${due ? "Revisar" : STATUS_LABEL[topicState.status]}</span><span class="topic-arrow" aria-hidden="true">→</span></span></button>
       </li>
     `;
   }
@@ -589,15 +570,9 @@
   }
 
   function getSubjectFocus(subjectId) {
-    const subjectTopics = allTopics.filter((topic) => topic.subject.id === subjectId);
-    const due = subjectTopics.filter((topic) => isReviewDue(topic.id)).sort(byReviewDate)[0];
-    if (due) return { topic: due, type: "review", reason: "Revisão pendente nesta matéria." };
-    const consolidating = subjectTopics.find((topic) => state.topics[topic.id].status === "consolidating");
-    if (consolidating) return { topic: consolidating, type: "consolidating", reason: "Reforce este conteúdo antes de avançar." };
-    const studying = subjectTopics.find((topic) => state.topics[topic.id].status === "studying");
-    if (studying) return { topic: studying, type: "studying", reason: "Continue de onde parou para reduzir dispersão." };
-    const pending = subjectTopics.find((topic) => state.topics[topic.id].status === "not-started");
-    return pending ? { topic: pending, type: "next", reason: "Primeiro conteúdo pendente na ordem da trilha." } : null;
+    const subjectTopics = allTopics.filter((topic) => topic.subject.id === subjectId && topic.planActive !== false);
+    const pending = subjectTopics.find((topic) => ["studying", "not-started"].includes(state.topics[topic.id].status));
+    return pending ? { topic: pending, type: "next", reason: "Próximo conteúdo ativo da matéria." } : null;
   }
 
   function isReviewDue(topicId) {
@@ -1205,14 +1180,37 @@
     elements.exportData.addEventListener("click", exportData);
     elements.importData.addEventListener("change", importData);
     elements.syncSummary.addEventListener("click", openSettings);
+    const passwordInput = document.getElementById("sync-password");
     elements.syncLogin.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const button = elements.syncLogin.querySelector("button[type='submit']");
+      if (!passwordInput.value) { showToast("Informe sua senha."); return; }
+      const button = event.submitter;
       button.disabled = true;
+      try { await cloudSync.signInWithPassword(elements.syncEmail.value.trim(), passwordInput.value); showToast("Acesso autorizado."); }
+      catch (error) { showToast(error.message); }
+      finally { passwordInput.value = ""; button.disabled = false; }
+    });
+    document.getElementById("sync-email-link").addEventListener("click", async (event) => {
+      if (!elements.syncEmail.reportValidity()) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      passwordInput.value = "";
       try { await cloudSync.signIn(elements.syncEmail.value.trim()); showToast("Link de acesso enviado por e-mail."); }
       catch (error) { showToast(error.message); }
       finally { button.disabled = false; }
     });
+    const passwordForm = document.getElementById("sync-password-form");
+    passwordForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const password = document.getElementById("sync-new-password").value;
+      if (password !== document.getElementById("sync-confirm-password").value) { showToast("As senhas não coincidem."); return; }
+      const button = event.submitter;
+      button.disabled = true;
+      try { await cloudSync.updatePassword(password); showToast("Senha salva. Use seu e-mail e senha no Chromebook."); }
+      catch (error) { showToast(error.message); }
+      finally { passwordForm.reset(); button.disabled = false; }
+    });
+    elements.settingsDialog.addEventListener("close", () => { passwordInput.value = ""; passwordForm.reset(); });
     elements.syncNow.addEventListener("click", async () => { await cloudSync.synchronize(); });
     elements.syncSignOut.addEventListener("click", async () => {
       try { await cloudSync.signOut(); showToast("Você saiu da sincronização."); }
@@ -1231,7 +1229,8 @@
     const action = event.target.closest("[data-action]");
     if (!action) return;
     const name = action.dataset.action;
-    if (name === "open-topic") openTopicDialog(action.dataset.topicId);
+    if (name === "open-settings") openSettings();
+    else if (name === "open-topic") openTopicDialog(action.dataset.topicId);
     else if (name === "quick-topic") {
       const current = state.topics[action.dataset.topicId].status;
       setTopicStatus(action.dataset.topicId, current === "mastered" ? "consolidating" : current === "consolidating" ? "mastered" : "consolidating");
